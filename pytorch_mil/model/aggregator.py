@@ -30,9 +30,10 @@ class Aggregator(nn.Module, ABC):
 
 class InstanceAggregator(Aggregator):
 
-    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name):
+    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_raw_last=True):
         super().__init__()
-        self.instance_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes, dropout, raw_last=True)
+        self.instance_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes, dropout,
+                                                           raw_last=classifier_raw_last)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
     def forward(self, instance_embeddings):
