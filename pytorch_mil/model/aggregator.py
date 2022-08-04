@@ -87,12 +87,12 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
     An LSTM Aggregator that only makes the bag prediction based on the final hidden state.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, bidirectional, dropout, ds_hid, n_classes):
+    def __init__(self, d_in, d_hid, n_lstm_layers, bidirectional, dropout, ds_hid, n_classes, classifier_raw_last=True):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, bidirectional, dropout)
         self.embedding_size = d_hid * 2 if bidirectional else d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=True)
+                                                            dropout, raw_last=classifier_raw_last)
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
@@ -128,12 +128,12 @@ class LstmInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=True)
+                                                            dropout, raw_last=classifier_raw_last)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
     def forward(self, instance_embeddings):
@@ -167,12 +167,12 @@ class LstmASCInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=True)
+                                                            dropout, raw_last=classifier_raw_last)
         self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
@@ -203,12 +203,12 @@ class LstmCSCInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_in + d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=True)
+                                                            dropout, raw_last=classifier_raw_last)
         # self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
