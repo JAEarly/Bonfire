@@ -153,8 +153,8 @@ class LstmBlock(nn.Module):
         else:
             bag_repr = out[:, -1, :]
 
-        bag_repr = self.dropout(bag_repr)
-        out = self.dropout(out)
+        # bag_repr = self.dropout(bag_repr)
+        # out = self.dropout(out)
         return bag_repr, out
 
     def partial_forward(self, instance_embedding, hidden_state, cell_state):
