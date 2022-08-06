@@ -114,6 +114,8 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
         if not self.training:
             with torch.no_grad():
                 cumulative_predictions = self.embedding_classifier(cumulative_bag_embeddings)
+                if self.classifier_activation_func is not None:
+                    cumulative_predictions = self.classifier_activation_func(cumulative_predictions)
         return bag_prediction, cumulative_predictions
 
     def partial_forward(self, instance_embedding, hidden_state, cell_state, prev_cumulative_bag_prediction):
