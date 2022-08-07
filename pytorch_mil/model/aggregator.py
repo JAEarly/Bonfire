@@ -125,6 +125,8 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
         bag_repr, new_hidden_state, new_cell_state = lstm_out
         # Classify bag representation and calculate instance prediction
         cumulative_bag_prediction = self.embedding_classifier(bag_repr)
+        if self.classifier_activation_func is not None:
+            cumulative_bag_prediction = self.classifier_activation_func(cumulative_bag_prediction)
         instance_prediction = cumulative_bag_prediction - prev_cumulative_bag_prediction
         # Return the instance prediction and new states
         return instance_prediction, new_hidden_state, new_cell_state
@@ -169,6 +171,8 @@ class LstmInstanceSpaceAggregator(Aggregator):
         bag_repr, new_hidden_state, new_cell_state = lstm_out
         # Classify bag representation
         instance_prediction = self.embedding_classifier(bag_repr)
+        if self.classifier_activation_func is not None:
+            instance_prediction = self.classifier_activation_func(instance_prediction)
         # Return the instance prediction and new states
         return instance_prediction, new_hidden_state, new_cell_state
 
@@ -260,6 +264,8 @@ class LstmCSCInstanceSpaceAggregator(Aggregator):
         # Create the skip representation and classify it
         skip_repr = torch.cat((instance_embedding.unsqueeze(0), bag_repr), dim=1)
         instance_prediction = self.embedding_classifier(skip_repr)
+        if self.classifier_activation_func is not None:
+            instance_prediction = self.classifier_activation_func(instance_prediction)
         # Return the instance prediction and new states
         return instance_prediction, new_hidden_state, new_cell_state
 
