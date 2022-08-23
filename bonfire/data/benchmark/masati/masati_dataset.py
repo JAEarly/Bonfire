@@ -13,7 +13,6 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from bonfire.data.mil_dataset import MilDataset
-from bonfire.train.metrics import RegressionMetric
 
 
 def _setup_loc_df():
@@ -236,26 +235,26 @@ class MasatiDataset(MilDataset):
         print('Dataset mean: {:}'.format(arrs_mean))
         print(' Dataset std: {:}'.format(arrs_std))
 
-    @classmethod
-    def baseline_performance(cls):
-        train_dataset, val_dataset, test_dataset = cls.create_datasets()
-        train_mean_target = train_dataset.targets.mean().item()
-        train_mean_target = round(train_mean_target)
-
-        def performance_for_dataset(pred, dataset):
-            targets = dataset.targets
-            preds = torch.ones_like(targets)
-            preds *= pred
-            metric = RegressionMetric.calculate_metric(preds, targets, None)
-            print('MSE Loss: {:.4f}'.format(metric.mse_loss))
-            print('MAE Loss: {:.4f}'.format(metric.mae_loss))
-
-        print('-- Train --')
-        performance_for_dataset(train_mean_target, train_dataset)
-        print('-- Val --')
-        performance_for_dataset(train_mean_target, val_dataset)
-        print('-- Test --')
-        performance_for_dataset(train_mean_target, test_dataset)
+    # @classmethod
+    # def baseline_performance(cls):
+    #     train_dataset, val_dataset, test_dataset = cls.create_datasets()
+    #     train_mean_target = train_dataset.targets.mean().item()
+    #     train_mean_target = round(train_mean_target)
+    #
+    #     def performance_for_dataset(pred, dataset):
+    #         targets = dataset.targets
+    #         preds = torch.ones_like(targets)
+    #         preds *= pred
+    #         metric = RegressionMetric.calculate_metric(preds, targets, None)
+    #         print('MSE Loss: {:.4f}'.format(metric.mse_loss))
+    #         print('MAE Loss: {:.4f}'.format(metric.mae_loss))
+    #
+    #     print('-- Train --')
+    #     performance_for_dataset(train_mean_target, train_dataset)
+    #     print('-- Val --')
+    #     performance_for_dataset(train_mean_target, val_dataset)
+    #     print('-- Test --')
+    #     performance_for_dataset(train_mean_target, test_dataset)
 
     @staticmethod
     def plot_ship_count_data():

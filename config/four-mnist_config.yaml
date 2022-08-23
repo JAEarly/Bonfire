@@ -1,0 +1,28 @@
+training:
+  default:
+    lr: 1.e-5
+    wd: 1.e-3
+    n_epochs: 100
+    patience: 5
+    patience_interval: 2
+  InstanceSpaceNN:
+    lr: 1.e-4
+    wd: 1.e-3
+    dropout: 0.05
+    agg_func: mean
+  AttentionNN:
+    lr: 1.e-4
+    wd: 1.e-6
+    dropout: 0.25
+    d_attn: 256
+tuning:
+  default:
+    lr: [1.e-6, 5.e-6, 1.e-5, 5.e-5, 1.e-4, 5.e-4, 1.e-3]
+    wd: [1.e-6, 1.e-5, 1.e-4, 1.e-3, 1.e-2]
+    dropout: [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
+  InstanceSpaceNN:
+    agg_func: [mean, max]
+  EmbeddingSpaceNN:
+    agg_func: [mean, max]
+  AttentionNN:
+    d_attn: [32, 64, 128, 256]

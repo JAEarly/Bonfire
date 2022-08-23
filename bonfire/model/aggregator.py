@@ -50,7 +50,7 @@ class InstanceAggregator(Aggregator):
 
     def forward(self, instance_embeddings):
         instance_predictions = self.instance_classifier(instance_embeddings)
-        bag_prediction = self.aggregation_func(instance_predictions.squeeze())
+        bag_prediction = self.aggregation_func(instance_predictions)
         return bag_prediction, instance_predictions
 
 

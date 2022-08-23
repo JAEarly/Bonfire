@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+import wandb
 from sklearn.metrics import accuracy_score, confusion_matrix
 from texttable import Texttable
 from torch import nn
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
@@ -53,6 +53,14 @@ class Metric(ABC):
     def out(self):
         pass
 
+    @abstractmethod
+    def wandb_log(self, dataset_split, commit):
+        pass
+
+    @abstractmethod
+    def wandb_summary(self, dataset_split):
+        pass
+
 
 class ClassificationMetric(Metric):
 
@@ -87,12 +95,25 @@ class ClassificationMetric(Metric):
         return ClassificationMetric(None, train_loss, None)
 
     def short_string_repr(self):
-        return "{{Acc: {:.3f}; Loss: {:.3f}}}".format(self.accuracy, self.loss)
+        return "{{Loss: {:.3f}; ".format(self.loss) + \
+               ("Acc: {:.3f}}}".format(self.accuracy) if self.accuracy is not None else "Acc: None}")
 
     def out(self):
         print('Acc: {:.3f}'.format(self.accuracy))
         print('Loss: {:.3f}'.format(self.loss))
         print(self.conf_mat)
+
+    def wandb_log(self, dataset_split, commit):
+        log_dict = {}
+        if self.loss is not None:
+            log_dict['{:s}_loss'.format(dataset_split)] = self.loss
+        if self.accuracy is not None:
+            log_dict['{:s}_acc'.format(dataset_split)] = self.accuracy
+        wandb.log(log_dict, commit=commit)
+
+    def wandb_summary(self, dataset_split):
+        wandb.summary["{:s}_acc".format(dataset_split)] = self.accuracy
+        wandb.summary["{:s}_loss".format(dataset_split)] = self.loss
 
 
 class RegressionMetric(Metric):
@@ -127,6 +148,18 @@ class RegressionMetric(Metric):
     def out(self):
         print('MSE Loss: {:.3f}'.format(self.mse_loss))
         print('MAE Loss: {:.3f}'.format(self.mae_loss))
+
+    def wandb_log(self, dataset_split, commit):
+        log_dict = {}
+        if self.mse_loss is not None:
+            log_dict['{:s}_mse'.format(dataset_split)] = self.mse_loss
+        if self.mae_loss is not None:
+            log_dict['{:s}_mae'.format(dataset_split)] = self.mae_loss
+        wandb.log(log_dict, commit=commit)
+
+    def wandb_summary(self, dataset_split):
+        wandb.summary["{:s}_mse".format(dataset_split)] = self.mse_loss
+        wandb.summary["{:s}_mae".format(dataset_split)] = self.mae_loss
 
 
 class CountRegressionMetric(RegressionMetric):
@@ -174,31 +207,34 @@ def eval_model(model, dataloader, metric):
     model.eval()
     with torch.no_grad():
         all_preds = []
+        all_targets = []
         for data in tqdm(dataloader, desc='Evaluating', leave=False):
-            bags = data[0]
+            bags, targets = data[0], data[1]
             bag_pred = model(bags)
             all_preds.append(bag_pred.cpu())
+            all_targets.append(targets.cpu())
         labels = list(range(model.n_classes))
         all_preds = torch.cat(all_preds)
-        bag_metric = metric.calculate_metric(all_preds, dataloader.dataset.targets, labels)
+        all_targets = torch.cat(all_targets)
+        bag_metric = metric.calculate_metric(all_preds, all_targets, labels)
         return bag_metric
 
 
-def output_results(model_names, results_arr):
+def output_results(model_names, results_arr, sort=True):
     n_models, n_repeats, n_splits = results_arr.shape
     assert n_models == len(model_names)
     assert n_splits == 3
 
     results_type = type(results_arr[0][0][0])
     if results_type == ClassificationMetric:
-        output_classification_results(model_names, results_arr)
+        output_classification_results(model_names, results_arr, sort=sort)
     elif issubclass(results_type, RegressionMetric):
-        output_regression_results(model_names, results_arr)
+        output_regression_results(model_names, results_arr, sort=sort)
     else:
         raise NotImplementedError('No results output for metrics {:}'.format(results_type))
 
 
-def output_classification_results(model_names, results_arr):
+def output_classification_results(model_names, results_arr, sort=True):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 6), dtype=object)
     mean_test_accuracies = []
@@ -215,8 +251,8 @@ def output_classification_results(model_names, results_arr):
         mean_test_accuracies.append(mean[5])
         for metric_idx in range(6):
             results[model_idx, metric_idx] = '{:.4f} +- {:.4f}'.format(mean[metric_idx], sem[metric_idx])
-    model_order = np.argsort(mean_test_accuracies)[::-1]
-    rows = [['Model Name', 'Train Accuracy', 'Train Loss', 'Val Accuracy', 'Val Loss', 'Test Accuracy', 'Test Loss']]
+    model_order = np.argsort(mean_test_accuracies)[::-1] if sort else list(range(len(model_names)))
+    rows = [['Model Name', 'Train Loss', 'Train Accuracy', 'Val Loss', 'Val Accuracy', 'Test Loss', 'Test Accuracy']]
     for model_idx in model_order:
         rows.append([model_names[model_idx]] + list(results[model_idx, :]))
     table = Texttable()
@@ -229,7 +265,7 @@ def output_classification_results(model_names, results_arr):
     print('Done!')
 
 
-def output_regression_results(model_names, results_arr):
+def output_regression_results(model_names, results_arr, sort=True):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 6), dtype=object)
     mean_test_mae_losses = []
@@ -246,7 +282,7 @@ def output_regression_results(model_names, results_arr):
         mean_test_mae_losses.append(mean[5])
         for metric_idx in range(6):
             results[model_idx, metric_idx] = '{:.4f} +- {:.4f}'.format(mean[metric_idx], sem[metric_idx])
-    model_order = np.argsort(mean_test_mae_losses)
+    model_order = np.argsort(mean_test_mae_losses) if sort else list(range(len(model_names)))
     rows = [['Model Name', 'Train MSE', 'Train MAE', 'Val MSE', 'Val MAE', 'Test MSE', 'Test MAE']]
     for model_idx in model_order:
         rows.append([model_names[model_idx]] + list(results[model_idx, :]))

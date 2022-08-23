@@ -19,6 +19,12 @@ class MilDataset(Dataset, ABC):
     @classmethod
     @property
     @abstractmethod
+    def name(cls):
+        pass
+
+    @classmethod
+    @property
+    @abstractmethod
     def d_in(cls):
         pass
 
@@ -35,13 +41,24 @@ class MilDataset(Dataset, ABC):
         pass
 
     @classmethod
+    @property
     @abstractmethod
-    def create_datasets(cls, seed=12):
+    def metric_clz(cls):
+        pass
+
+    @classmethod
+    @abstractmethod
+    def create_datasets(cls, num_test_bags=None):
         pass
 
     @classmethod
     @abstractmethod
     def create_complete_dataset(cls):
+        pass
+
+    @classmethod
+    @abstractmethod
+    def get_target_mask(cls, instance_targets, clz):
         pass
 
     def summarise(self, out_clz_dist=True):

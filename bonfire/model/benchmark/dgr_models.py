@@ -1,25 +1,34 @@
-import torch
+import wandb
 from overrides import overrides
 from torch import nn
 
-from bonfire.data.benchmark.dgr.dgr_dataset import DGRDataset
+from bonfire.data.benchmark.dgr.dgr_dataset import DgrDataset
 from bonfire.model import aggregator as agg
 from bonfire.model import models
 from bonfire.model import modules as mod
 
 
 def get_model_clzs():
-    return [DgrInstanceSpaceNN, DgrEmbeddingSpaceNN]
+    return [DgrInstanceSpaceNN, DgrEmbeddingSpaceNN, DgrAttentionNN]
+
+
+def get_model_param(key):
+    return wandb.config[key]
+
+
+DGR_D_ENC = 128
+DGR_DS_ENC_HID = (512,)
+DGR_DS_AGG_HID = (64,)
 
 
 class DgrEncoder(nn.Module):
 
-    def __init__(self, ds_enc_hid, d_enc, dropout):
+    def __init__(self, dropout):
         super().__init__()
         conv1 = mod.ConvBlock(c_in=3, c_out=36, kernel_size=4, stride=1, padding=0)
         conv2 = mod.ConvBlock(c_in=36, c_out=48, kernel_size=3, stride=1, padding=0)
         self.fe = nn.Sequential(conv1, conv2)
-        self.fc_stack = mod.FullyConnectedStack(DGRDataset.d_in, ds_enc_hid, d_enc, dropout, raw_last=False)
+        self.fc_stack = mod.FullyConnectedStack(DgrDataset.d_in, DGR_DS_ENC_HID, DGR_D_ENC, dropout, raw_last=False)
 
     def forward(self, instances):
         x = self.fe(instances)
@@ -30,10 +39,12 @@ class DgrEncoder(nn.Module):
 
 class DgrInstanceSpaceNN(models.InstanceSpaceNN):
 
-    def __init__(self, device, d_enc=64, ds_enc_hid=(64,), ds_agg_hid=(64,), dropout=0.25, agg_func_name='mean'):
-        encoder = DgrEncoder(ds_enc_hid, d_enc, dropout)
-        aggregator = agg.InstanceAggregator(d_enc, ds_agg_hid, DGRDataset.n_classes, dropout, agg_func_name)
-        super().__init__(device, DGRDataset.n_classes, DGRDataset.n_expected_dims, encoder, aggregator)
+    def __init__(self, device):
+        dropout = get_model_param("dropout")
+        agg_func = get_model_param("agg_func")
+        encoder = DgrEncoder(dropout)
+        aggregator = agg.InstanceAggregator(DGR_D_ENC, DGR_DS_AGG_HID, DgrDataset.n_classes, dropout, agg_func)
+        super().__init__(device, DgrDataset.n_classes, DgrDataset.n_expected_dims, encoder, aggregator)
 
     @overrides
     def suggest_train_params(self):
@@ -45,10 +56,12 @@ class DgrInstanceSpaceNN(models.InstanceSpaceNN):
 
 class DgrEmbeddingSpaceNN(models.EmbeddingSpaceNN):
 
-    def __init__(self, device, d_enc=64, ds_enc_hid=(64,), ds_agg_hid=(64,), dropout=0.25, agg_func_name='mean'):
-        encoder = DgrEncoder(ds_enc_hid, d_enc, dropout)
-        aggregator = agg.EmbeddingAggregator(d_enc, ds_agg_hid, DGRDataset.n_classes, dropout, agg_func_name)
-        super().__init__(device, DGRDataset.n_classes, DGRDataset.n_expected_dims, encoder, aggregator)
+    def __init__(self, device):
+        dropout = get_model_param("dropout")
+        agg_func = get_model_param("agg_func")
+        encoder = DgrEncoder(dropout)
+        aggregator = agg.EmbeddingAggregator(DGR_D_ENC, DGR_DS_AGG_HID, DgrDataset.n_classes, dropout, agg_func)
+        super().__init__(device, DgrDataset.n_classes, DgrDataset.n_expected_dims, encoder, aggregator)
 
     @overrides
     def suggest_train_params(self):
@@ -56,3 +69,14 @@ class DgrEmbeddingSpaceNN(models.EmbeddingSpaceNN):
             'lr': 5e-4,
             'weight_decay': 1e-4,
         }
+
+
+class DgrAttentionNN(models.AttentionNN):
+
+    def __init__(self, device):
+        dropout = get_model_param("dropout")
+        d_attn = get_model_param("d_attn")
+        encoder = DgrEncoder(dropout)
+        aggregator = agg.MultiHeadAttentionAggregator(1, DGR_D_ENC, DGR_DS_AGG_HID, d_attn,
+                                                      DgrDataset.n_classes, dropout)
+        super().__init__(device, DgrDataset.n_classes, DgrDataset.n_expected_dims, encoder, aggregator)

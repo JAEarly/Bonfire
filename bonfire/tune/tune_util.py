@@ -11,18 +11,6 @@ def _create_pruner():
     return optuna.pruners.SuccessiveHalvingPruner(min_early_stopping_rate=2)
 
 
-def setup_study(study_name, study_dir_path, direction='maximize'):
-    timestamp = datetime.now().strftime('%Y-%m-%d-%H.%M.%S')
-    study_uid = study_name + "_" + timestamp
-    study_path = TUNE_ROOT_DIR + "/" + study_dir_path + "/" + study_uid
-    print('Creating study at: {:s}'.format(study_path))
-    if not os.path.exists(study_path):
-        os.makedirs(study_path)
-    storage_uid = "sqlite:///{}/study.db".format(study_path)
-    pruner = _create_pruner()
-    return optuna.create_study(direction=direction, study_name=study_uid, storage=storage_uid, pruner=pruner)
-
-
 def load_study(study_uid, study_dir_path, direction='Maximize'):
     study_path = TUNE_ROOT_DIR + "/" + study_dir_path + "/" + study_uid
     if not os.path.exists(study_path):

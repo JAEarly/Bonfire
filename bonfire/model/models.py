@@ -7,8 +7,8 @@ from torch_geometric.data.data import Data
 from torch_geometric.nn import SAGEConv, dense_diff_pool
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 
-from bonfire.model import modules as mod
 from bonfire.model import aggregator as agg
+from bonfire.model import modules as mod
 
 
 class MultipleInstanceModel(nn.Module, ABC):
@@ -18,6 +18,12 @@ class MultipleInstanceModel(nn.Module, ABC):
         self.device = device
         self.n_classes = n_classes
         self.n_expec_dims = n_expec_dims
+
+    @classmethod
+    @property
+    @abstractmethod
+    def name(cls):
+        pass
 
     @abstractmethod
     def forward(self, model_input):
@@ -33,17 +39,6 @@ class MultipleInstanceModel(nn.Module, ABC):
 
     def suggest_train_params(self):
         return {}
-
-    def get_param_save_string(self):
-        return ""
-
-    @classmethod
-    def load_model(cls, device, path, *model_args):
-        model = cls(device, *model_args)
-        model.load_state_dict(torch.load(path))
-        model.to(device)
-        model.eval()
-        return model
 
 
 class MultipleInstanceNN(MultipleInstanceModel, ABC):
@@ -86,6 +81,8 @@ class MultipleInstanceNN(MultipleInstanceModel, ABC):
 
 class InstanceSpaceNN(MultipleInstanceNN, ABC):
 
+    name = "InstanceSpaceNN"
+
     def __init__(self, device, n_classes, n_expec_dims, encoder, aggregator):
         super().__init__(device, n_classes, n_expec_dims)
         self.encoder = encoder
@@ -113,6 +110,8 @@ class InstanceSpaceNN(MultipleInstanceNN, ABC):
 
 class EmbeddingSpaceNN(MultipleInstanceNN, ABC):
 
+    name = "EmbeddingSpaceNN"
+
     def __init__(self, device, n_classes, n_expec_dims, encoder, aggregator):
         super().__init__(device, n_classes, n_expec_dims)
         self.encoder = encoder
@@ -135,6 +134,8 @@ class EmbeddingSpaceNN(MultipleInstanceNN, ABC):
 
 
 class AttentionNN(MultipleInstanceNN, ABC):
+
+    name = "AttentionNN"
 
     def __init__(self, device, n_classes, n_expec_dims, encoder, aggregator):
         super().__init__(device, n_classes, n_expec_dims)
@@ -160,6 +161,8 @@ class AttentionNN(MultipleInstanceNN, ABC):
 
 
 class ClusterGNN(MultipleInstanceModel, ABC):
+
+    name = "ClusterGNN"
 
     def __init__(self, device, n_classes, n_expec_dims, encoder, d_enc, d_gnn, ds_gnn_hid, ds_fc_hid, dropout):
         super().__init__(device, n_classes, n_expec_dims)

@@ -1,11 +1,13 @@
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from torch.utils.data import random_split
 from torchvision import transforms
 from torchvision.datasets import MNIST
 
 from bonfire.data.mil_dataset import MilDataset
+from bonfire.train.metrics import ClassificationMetric
 
 
 def load_mnist(train):
@@ -34,9 +36,9 @@ def split_mnist_datasets(random_state=12):
     return train_mnist_dataset, val_mnist_dataset, test_mnist_dataset
 
 
-def get_class_idxs(original_dataset, target_clzs):
+def get_class_idxs(original_targets, target_clzs):
     selected_idxs = []
-    for idx, target in enumerate(original_dataset.targets):
+    for idx, target in enumerate(original_targets):
         if target in target_clzs:
             selected_idxs.append(idx)
     return selected_idxs
@@ -160,48 +162,76 @@ class SingleDigitMnistBagsDataset(MilDataset):
 
 class FourMnistBagsDataset(MilDataset):
 
-    name = 'FourMnistBags'
+    name = 'four-mnist'
     d_in = 800
     n_expected_dims = 4  # i x c x h x w
     n_classes = 4
+    metric_clz = ClassificationMetric
 
     @classmethod
-    def create_datasets(cls, mean_bag_size=30, var_bag_size=2, num_train_bags=2500, num_test_bags=1000,
-                        seed=None):
-        if seed is not None:
-            np.random.seed(seed=seed)
-        train_mnist_dataset, val_mnist_dataset, test_mnist_dataset = split_mnist_datasets(random_state=seed)
-        train_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_train_bags, train_mnist_dataset)
-        val_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_test_bags, val_mnist_dataset)
-        test_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_test_bags, test_mnist_dataset)
-        return train_dataset, val_dataset, test_dataset
+    def get_dataset_splits(cls, mnist_dataset, random_state=5):
+        # Split using stratified k fold (5 splits)
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+        splits = skf.split(mnist_dataset.data, mnist_dataset.targets)
+
+        # Split further into train/val/test (80/10/10)
+        for train_split, test_split in splits:
+            # Split test split in half (stratified)
+            val_split, test_split = train_test_split(test_split, random_state=random_state, test_size=0.5,
+                                                     stratify=mnist_dataset.targets[test_split])
+            # Yield splits
+            yield train_split, val_split, test_split
+
+    @classmethod
+    def create_datasets(cls, mean_bag_size=30, var_bag_size=2, num_train_bags=2500, num_test_bags=1000, random_state=5):
+        np.random.seed(random_state)
+
+        # Load original mnist dataset (training set only)
+        mnist_dataset = load_mnist(train=True)
+
+        # Create actual MIL datasets from the mnist dataset
+        #  The mnist dataset is split in train/val/test first to ensure no overlap between the MIL datasets
+        for train_split, val_split, test_split in cls.get_dataset_splits(mnist_dataset, random_state=random_state):
+            train_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_train_bags,
+                                                mnist_dataset.data[train_split], mnist_dataset.targets[train_split],
+                                                random_state=random_state)
+            val_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_test_bags,
+                                              mnist_dataset.data[val_split], mnist_dataset.targets[val_split],
+                                              random_state=random_state)
+            test_dataset = cls._create_dataset(mean_bag_size, var_bag_size, num_test_bags,
+                                               mnist_dataset.data[test_split], mnist_dataset.targets[test_split],
+                                               random_state=random_state)
+            yield train_dataset, val_dataset, test_dataset
 
     @classmethod
     def create_complete_dataset(cls):
         raise NotImplementedError
 
     @classmethod
-    def _create_dataset(cls, mean_bag_size, var_bag_size, num_bags, original_dataset, discrim_prob=0.1):
+    def _create_dataset(cls, mean_bag_size, var_bag_size, num_bags, original_data, original_targets, discrim_prob=0.1,
+                        random_state=5):
+        np.random.seed(random_state)
+
         # Split original data into relevant distributions
         # Clz 0 - Non Discrim: N/A    Discrim: 0 to 7
         # Clz 1 - Non Discrim: 0 to 7 Discrim: 8
         # Clz 2 - Non Discrim: 0 to 7 Discrim: 9
         # Clz 3 - Non Discrim: 0 to 7 Discrim: 8, 9
 
-        zero_to_seven_idxs = get_class_idxs(original_dataset, list(range(8)))
-        eight_idxs = get_class_idxs(original_dataset, [8])
-        nine_idxs = get_class_idxs(original_dataset, [9])
-        eight_nine_idxs = get_class_idxs(original_dataset, [8, 9])
+        zero_to_seven_idxs = get_class_idxs(original_targets, list(range(8)))
+        eight_idxs = get_class_idxs(original_targets, [8])
+        nine_idxs = get_class_idxs(original_targets, [9])
+        eight_nine_idxs = get_class_idxs(original_targets, [8, 9])
 
-        zero_to_seven_data = original_dataset.data[zero_to_seven_idxs]
-        eight_data = original_dataset.data[eight_idxs]
-        nine_data = original_dataset.data[nine_idxs]
-        eight_nine_data = original_dataset.data[eight_nine_idxs]
+        zero_to_seven_data = original_data[zero_to_seven_idxs]
+        eight_data = original_data[eight_idxs]
+        nine_data = original_data[nine_idxs]
+        eight_nine_data = original_data[eight_nine_idxs]
 
         zero_to_seven_targets = [0] * len(zero_to_seven_idxs)
         eight_targets = [1] * len(eight_idxs)
         nine_targets = [2] * len(nine_idxs)
-        eight_nine_targets = [2 if t == 9 else 1 if t == 8 else 0 for t in original_dataset.targets[eight_nine_idxs]]
+        eight_nine_targets = [2 if t == 9 else 1 if t == 8 else 0 for t in original_targets[eight_nine_idxs]]
 
         zero_to_seven_dist = list(zip(zero_to_seven_data, zero_to_seven_targets))
         eight_dist = list(zip(eight_data, eight_targets))
@@ -278,6 +308,26 @@ class FourMnistBagsDataset(MilDataset):
         if 1 in bag_instance_targets:
             return 1
         return 0
+
+    @classmethod
+    def get_target_mask(cls, instance_targets, clz):
+        mask_negative_idxs = []
+        if clz == 3:
+            mask_positive_idxs = (instance_targets != 0).nonzero()[0]
+        elif clz == 2:
+            mask_positive_idxs = (instance_targets == 2).nonzero()[0]
+            mask_negative_idxs = (instance_targets == 1).nonzero()[0]
+        elif clz == 1:
+            mask_positive_idxs = (instance_targets == 1).nonzero()[0]
+            mask_negative_idxs = (instance_targets == 2).nonzero()[0]
+        elif clz == 0:
+            mask_positive_idxs = (instance_targets == 0).nonzero()[0]
+        else:
+            raise ValueError('Invalid MNIST class {:}'.format(clz))
+        mask = np.zeros(len(instance_targets))
+        mask[mask_positive_idxs] = 1
+        mask[mask_negative_idxs] = -1
+        return mask
 
 
 class CountMnistBagsDataset(MilDataset):
