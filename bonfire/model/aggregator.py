@@ -43,28 +43,27 @@ class Aggregator(nn.Module, ABC):
 
 class InstanceAggregator(Aggregator):
 
-    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_raw_last=True,
-                 classifier_activation_func=None):
+    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_final_activation_func=None):
         super().__init__()
-        self.instance_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes, dropout,
-                                                           raw_last=classifier_raw_last)
+        self.instance_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes,
+                                                           dropout=dropout,
+                                                           final_activation_func=classifier_final_activation_func)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.classifier_activation_func = classifier_activation_func
 
     def forward(self, instance_embeddings):
         instance_predictions = self.instance_classifier(instance_embeddings)
-        if self.classifier_activation_func is not None:
-            instance_predictions = self.classifier_activation_func(instance_predictions)
         bag_prediction = self.aggregation_func(instance_predictions)
         return bag_prediction, instance_predictions
 
 
 class EmbeddingAggregator(Aggregator):
 
-    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name):
+    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_final_activation_func=None):
         super().__init__()
         self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.embedding_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes, dropout, raw_last=True)
+        self.embedding_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes,
+                                                            dropout=dropout,
+                                                            final_activation_func=classifier_final_activation_func)
 
     def forward(self, instance_embeddings):
         bag_embedding = self.aggregation_func(instance_embeddings)
@@ -77,7 +76,8 @@ class MultiHeadAttentionAggregator(Aggregator):
     def __init__(self, n_heads, d_in, ds_hid, d_attn, n_classes, dropout):
         super().__init__()
         self.attention_aggregator = mod.MultiHeadAttentionBlock(n_heads, d_in, d_attn, dropout)
-        self.embedding_classifier = mod.FullyConnectedStack(n_heads * d_in, ds_hid, n_classes, dropout, raw_last=True)
+        self.embedding_classifier = mod.FullyConnectedStack(n_heads * d_in, ds_hid, n_classes,
+                                                            dropout=dropout, final_activation_func=None)
 
     def forward(self, instance_embeddings):
         bag_embedding, attn = self.attention_aggregator(instance_embeddings)
@@ -105,22 +105,20 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
     An LSTM Aggregator that only makes the bag prediction based on the final hidden state.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, bidirectional, dropout, ds_hid, n_classes, classifier_raw_last=True,
-                 classifier_activation_func=None):
+    def __init__(self, d_in, d_hid, n_lstm_layers, bidirectional, dropout, ds_hid, n_classes,
+                 classifier_final_activation_func=None):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, bidirectional, dropout)
         self.embedding_size = d_hid * 2 if bidirectional else d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=classifier_raw_last)
-        self.classifier_activation_func = classifier_activation_func
+                                                            final_activation_func=classifier_final_activation_func,
+                                                            dropout=dropout)
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
         bag_embedding, cumulative_bag_embeddings = self.lstm_block(torch.unsqueeze(instance_embeddings, 0))
         # Get bag prediction
         bag_prediction = self.embedding_classifier(bag_embedding)
-        if self.classifier_activation_func is not None:
-            bag_prediction = self.classifier_activation_func(bag_prediction)
 
         # Get cumulative instance predictions if not training
         cumulative_predictions = None
@@ -155,23 +153,21 @@ class LstmInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True,
-                 classifier_activation_func=None):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
+                 classifier_final_activation_func=None):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=classifier_raw_last)
+                                                            final_activation_func=classifier_final_activation_func,
+                                                            dropout=dropout)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.classifier_activation_func = classifier_activation_func
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
         _, cumulative_bag_embeddings = self.lstm_block(torch.unsqueeze(instance_embeddings, 0))
         # Get prediction for each instance
         instance_predictions = self.embedding_classifier(cumulative_bag_embeddings)
-        if self.classifier_activation_func is not None:
-            instance_predictions = self.classifier_activation_func(instance_predictions)
 
         # Aggregate to bag prediction
         bag_prediction = self.aggregation_func(instance_predictions.squeeze())
@@ -201,16 +197,16 @@ class LstmASCInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True,
-                 classifier_activation_func=None):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
+                 classifier_final_activation_func=None):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=classifier_raw_last)
+                                                            final_activation_func=classifier_final_activation_func,
+                                                            dropout=dropout)
         self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.classifier_activation_func = classifier_activation_func
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
@@ -223,8 +219,6 @@ class LstmASCInstanceSpaceAggregator(Aggregator):
 
         # Get prediction for each instance
         instance_predictions = self.embedding_classifier(skip_reprs)
-        if self.classifier_activation_func is not None:
-            instance_predictions = self.classifier_activation_func(instance_predictions)
 
         # Aggregate to bag prediction
         bag_prediction = self.aggregation_func(instance_predictions.squeeze())
@@ -242,16 +236,16 @@ class LstmCSCInstanceSpaceAggregator(Aggregator):
     Assumes forward direction only.
     """
 
-    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name, classifier_raw_last=True,
-                 classifier_activation_func=None):
+    def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
+                 classifier_final_activation_func=None):
         super().__init__()
         self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_in + d_hid
         self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            dropout, raw_last=classifier_raw_last)
+                                                            final_activation_func=classifier_final_activation_func,
+                                                            dropout=dropout)
         # self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.classifier_activation_func = classifier_activation_func
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
@@ -262,8 +256,6 @@ class LstmCSCInstanceSpaceAggregator(Aggregator):
 
         # Get prediction for each instance
         instance_predictions = self.embedding_classifier(skip_reprs)
-        if self.classifier_activation_func is not None:
-            instance_predictions = self.classifier_activation_func(instance_predictions)
 
         # Aggregate to bag prediction
         bag_prediction = self.aggregation_func(instance_predictions.squeeze())

@@ -168,10 +168,11 @@ class ClusterGNN(MultipleInstanceModel, ABC):
         super().__init__(device, n_classes, n_expec_dims)
         self.n_clusters = 1
         self.encoder = encoder
-        self.gnn_stack = mod.GNNConvStack(d_enc, ds_gnn_hid, d_gnn, dropout, SAGEConv, raw_last=False)
+        self.gnn_stack = mod.GNNConvStack(d_enc, ds_gnn_hid, d_gnn, SAGEConv, dropout=dropout)
         # TODO this should be called GNN cluster but the trained models are stuck with gnn_pool
         self.gnn_pool = SAGEConv(d_enc, self.n_clusters)
-        self.classifier = mod.FullyConnectedStack(d_gnn, ds_fc_hid, n_classes, dropout, raw_last=True)
+        self.classifier = mod.FullyConnectedStack(d_gnn, ds_fc_hid, n_classes,
+                                                  final_activation_func=None, dropout=dropout)
 
     def forward(self, model_input):
         # We don't care about any interpretability output here

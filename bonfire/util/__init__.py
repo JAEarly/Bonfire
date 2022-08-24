@@ -28,7 +28,7 @@ def get_default_save_path(dataset_name, model_name, modifier=None):
 def load_model(device, dataset_name, model_clz, modifier=None):
     path, _, _ = get_default_save_path(dataset_name, model_clz.name, modifier=modifier)
     model = model_clz(device)
-    model.load_state_dict(torch.load(path))
+    model.load_state_dict(torch.load(path, map_location=device))
     model.to(device)
     model.eval()
     return model

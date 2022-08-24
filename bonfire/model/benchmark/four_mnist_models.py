@@ -29,7 +29,7 @@ class MnistEncoder(nn.Module):
         conv2 = mod.ConvBlock(c_in=20, c_out=50, kernel_size=5, stride=1, padding=0)
         self.fe = nn.Sequential(conv1, conv2)
         self.fc_stack = mod.FullyConnectedStack(FourMnistBagsDataset.d_in, MNIST_DS_ENC_HID, MNIST_D_ENC,
-                                                dropout, raw_last=False)
+                                                final_activation_func=None, dropout=dropout)
 
     def forward(self, instances):
         x = self.fe(instances)

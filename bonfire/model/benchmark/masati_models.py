@@ -20,7 +20,8 @@ class MasatiEncoder(nn.Module):
         conv1 = mod.ConvBlock(c_in=3, c_out=36, kernel_size=4, stride=1, padding=0)
         conv2 = mod.ConvBlock(c_in=36, c_out=48, kernel_size=3, stride=1, padding=0)
         self.fe = nn.Sequential(conv1, conv2)
-        self.fc_stack = mod.FullyConnectedStack(MasatiDataset.d_in, ds_enc_hid, d_enc, dropout, raw_last=False)
+        self.fc_stack = mod.FullyConnectedStack(MasatiDataset.d_in, ds_enc_hid, d_enc,
+                                                final_activation_func=None, dropout=dropout)
 
     def forward(self, instances):
         x = self.fe(instances)

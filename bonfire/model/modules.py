@@ -17,18 +17,14 @@ class ConvBlock(nn.Module):
 
 class FullyConnectedBlock(nn.Module):
 
-    def __init__(self, d_in, d_out, dropout, raw):
+    def __init__(self, d_in, d_out, activation_func=nn.ReLU(), dropout=0):
         super().__init__()
-        fc = nn.Linear(d_in, d_out)
-        if raw:
-            self.block = nn.Sequential(fc)
-        else:
-            relu = nn.ReLU()
-            if dropout != 0:
-                dropout = nn.Dropout(p=dropout)
-                self.block = nn.Sequential(fc, relu, dropout)
-            else:
-                self.block = nn.Sequential(fc, relu)
+        layers = [nn.Linear(d_in, d_out)]
+        if activation_func is not None:
+            layers.append(activation_func)
+        if dropout != 0:
+            layers.append(nn.Dropout(p=dropout))
+        self.block = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.block(x)
@@ -36,7 +32,7 @@ class FullyConnectedBlock(nn.Module):
 
 class FullyConnectedStack(nn.Module):
 
-    def __init__(self, d_in, ds_hid, d_out, dropout, raw_last):
+    def __init__(self, d_in, ds_hid, d_out, activation_func=nn.ReLU(), final_activation_func=nn.ReLU(), dropout=0):
         super().__init__()
         self.d_in = d_in
         self.ds_hid = ds_hid
@@ -46,7 +42,8 @@ class FullyConnectedStack(nn.Module):
         for i in range(self.n_blocks):
             in_size = d_in if i == 0 else ds_hid[i - 1]
             out_size = d_out if i == self.n_blocks - 1 else ds_hid[i]
-            blocks.append(FullyConnectedBlock(in_size, out_size, dropout, raw_last and i == self.n_blocks - 1))
+            block_activation = final_activation_func if i == self.n_blocks - 1 else activation_func
+            blocks.append(FullyConnectedBlock(in_size, out_size, activation_func=block_activation, dropout=dropout))
         self.stack = nn.Sequential(*blocks)
 
     def forward(self, x):
@@ -92,33 +89,34 @@ class MultiHeadAttentionBlock(nn.Module):
 
 class GNNConvBlock(nn.Module):
 
-    def __init__(self, in_size, out_size, dropout, conv_clz, raw):
+    def __init__(self, in_size, out_size, conv_clz, activation_func=nn.ReLU(), dropout=0):
         super().__init__()
         # Can't use sequential here as we have to pass two args through conv, but only one through relu and dropout
         self.conv = conv_clz(in_size, out_size)
-        self.relu = nn.ReLU()
+        self.activation_func = activation_func
         self.dropout = nn.Dropout(p=dropout)
-        self.raw = raw
 
     def forward(self, x):
         x, edge_index = x
         x = self.conv(x, edge_index)
-        if not self.raw:
-            x = self.relu(x)
-            x = self.dropout(x)
+        if self.activation_func:
+            x = self.activation_func(x)
+        x = self.dropout(x)
         return x, edge_index
 
 
 class GNNConvStack(nn.Module):
 
-    def __init__(self, d_in, ds_hid, d_out, dropout, conv_clz, raw_last):
+    def __init__(self, d_in, ds_hid, d_out, conv_clz, activation_func=nn.ReLU(),
+                 final_activation_func=nn.ReLU(), dropout=0):
         super().__init__()
         n_blocks = len(ds_hid) + 1
         blocks = []
         for i in range(n_blocks):
             in_size = d_in if i == 0 else ds_hid[i - 1]
             out_size = d_out if i == n_blocks - 1 else ds_hid[i]
-            blocks.append(GNNConvBlock(in_size, out_size, dropout, conv_clz, raw_last and i == n_blocks - 1))
+            block_activation = final_activation_func if i == self.n_blocks - 1 else activation_func
+            blocks.append(GNNConvBlock(in_size, out_size, conv_clz, activation_func=block_activation, dropout=dropout))
         self.stack = nn.Sequential(*blocks)
 
     def forward(self, x):
