@@ -120,71 +120,71 @@ class RegressionMetric(Metric):
 
     optimise_direction = 'minimize'
 
-    def __init__(self, mse_loss, mae_loss):
-        self.mse_loss = mse_loss
+    def __init__(self, rmse_loss, mae_loss):
+        self.rmse_loss = rmse_loss
         self.mae_loss = mae_loss
 
     def key_metric(self):
-        return self.mse_loss
+        return self.rmse_loss
 
     @staticmethod
     def criterion():
-        return lambda outputs, targets: nn.MSELoss()(outputs.squeeze(), targets.squeeze())
+        return lambda outputs, targets: torch.sqrt(nn.MSELoss()(outputs.squeeze(), targets.squeeze()))
 
     @staticmethod
     def calculate_metric(preds, targets, labels):
-        mse_loss = RegressionMetric.criterion()(preds, targets).item()
+        rmse_loss = RegressionMetric.criterion()(preds, targets).item()
         mae_loss = nn.L1Loss()(preds.squeeze(), targets.squeeze()).item()
-        return RegressionMetric(mse_loss, mae_loss)
+        return RegressionMetric(rmse_loss, mae_loss)
 
     @staticmethod
     def from_train_loss(train_loss):
         return RegressionMetric(train_loss, None)
 
     def short_string_repr(self):
-        return "{{MSE Loss: {:.3f}; ".format(self.mse_loss) + \
+        return "{{RMSE Loss: {:.3f}; ".format(self.rmse_loss) + \
                ("MAE Loss: {:.3f}}}".format(self.mae_loss) if self.mae_loss is not None else "MAE Loss: None}")
 
     def out(self):
-        print('MSE Loss: {:.3f}'.format(self.mse_loss))
+        print('RMSE Loss: {:.3f}'.format(self.rmse_loss))
         print('MAE Loss: {:.3f}'.format(self.mae_loss))
 
     def wandb_log(self, dataset_split, commit):
         log_dict = {}
-        if self.mse_loss is not None:
-            log_dict['{:s}_mse'.format(dataset_split)] = self.mse_loss
+        if self.rmse_loss is not None:
+            log_dict['{:s}_rmse'.format(dataset_split)] = self.rmse_loss
         if self.mae_loss is not None:
             log_dict['{:s}_mae'.format(dataset_split)] = self.mae_loss
         wandb.log(log_dict, commit=commit)
 
     def wandb_summary(self, dataset_split):
-        wandb.summary["{:s}_mse".format(dataset_split)] = self.mse_loss
+        wandb.summary["{:s}_rmse".format(dataset_split)] = self.rmse_loss
         wandb.summary["{:s}_mae".format(dataset_split)] = self.mae_loss
 
 
-class CountRegressionMetric(RegressionMetric):
-
-    def __init__(self, mse_loss, mae_loss, conf_mat=None):
-        super().__init__(mse_loss, mae_loss)
-        self.conf_mat = conf_mat
-
-    @staticmethod
-    def calculate_metric(preds, targets, labels):
-        regression_metric = RegressionMetric.calculate_metric(preds, targets, labels)
-        max_count = int(max(max(targets), max(preds)))
-        labels = list(range(max_count + 1))
-        conf_mat = pd.DataFrame(
-            confusion_matrix(targets.long(), torch.round(preds), labels=labels),
-            index=pd.Index(labels, name='Actual'),
-            columns=pd.Index(labels, name='Predicted')
-        )
-        return CountRegressionMetric(regression_metric.mse_loss, regression_metric.mae_loss, conf_mat)
-
-    def out(self):
-        print('MSE Loss: {:.3f}'.format(self.mse_loss))
-        print('MAE Loss: {:.3f}'.format(self.mae_loss))
-        if self.conf_mat is not None:
-            print(self.conf_mat)
+# class CountRegressionMetric(RegressionMetric):
+#
+#     def __init__(self, mse_loss, mae_loss, conf_mat=None):
+#         super().__init__(mse_loss, mae_loss)
+#         self.conf_mat = conf_mat
+#
+#     @staticmethod
+#     def calculate_metric(preds, targets, labels):
+#         regression_metric = RegressionMetric.calculate_metric(preds, targets, labels)
+#         max_count = int(max(max(targets), max(preds)))
+#         labels = list(range(max_count + 1))
+#         conf_mat = pd.DataFrame(
+#             confusion_matrix(targets.long(), torch.round(preds), labels=labels),
+#             index=pd.Index(labels, name='Actual'),
+#             columns=pd.Index(labels, name='Predicted')
+#         )
+#         return CountRegressionMetric(regression_metric.rmse_loss, regression_metric.mae_loss, conf_mat)
+#
+#     def out(self):
+#         print('MSE Loss: {:.3f}'.format(self.rmse_loss))
+#         print('MAE Loss: {:.3f}'.format(self.mae_loss))
+#         if self.conf_mat is not None:
+#             print(self.conf_mat)
 
 
 def eval_complete(model, train_dataloader, val_dataloader, test_dataloader, metric, verbose=False):
@@ -274,16 +274,16 @@ def output_regression_results(model_names, results_arr, sort=True):
         expanded_model_results = np.empty((n_repeats, 6), dtype=float)
         for repeat_idx in range(n_repeats):
             train_results, val_results, test_results = model_results[repeat_idx]
-            expanded_model_results[repeat_idx, :] = [train_results.mse_loss, train_results.mae_loss,
-                                                     val_results.mse_loss, val_results.mae_loss,
-                                                     test_results.mse_loss, test_results.mae_loss]
+            expanded_model_results[repeat_idx, :] = [train_results.rmse_loss, train_results.mae_loss,
+                                                     val_results.rmse_loss, val_results.mae_loss,
+                                                     test_results.rmse_loss, test_results.mae_loss]
         mean = np.mean(expanded_model_results, axis=0)
         sem = np.std(expanded_model_results, axis=0) / np.sqrt(len(expanded_model_results))
         mean_test_mae_losses.append(mean[5])
         for metric_idx in range(6):
             results[model_idx, metric_idx] = '{:.4f} +- {:.4f}'.format(mean[metric_idx], sem[metric_idx])
     model_order = np.argsort(mean_test_mae_losses) if sort else list(range(len(model_names)))
-    rows = [['Model Name', 'Train MSE', 'Train MAE', 'Val MSE', 'Val MAE', 'Test MSE', 'Test MAE']]
+    rows = [['Model Name', 'Train RMSE', 'Train MAE', 'Val RMSE', 'Val MAE', 'Test RMSE', 'Test MAE']]
     for model_idx in model_order:
         rows.append([model_names[model_idx]] + list(results[model_idx, :]))
     table = Texttable()
