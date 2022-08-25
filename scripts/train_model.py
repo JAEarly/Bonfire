@@ -4,7 +4,7 @@ from bonfire.data.benchmark import dataset_names
 from bonfire.model.benchmark import model_names
 from bonfire.train.trainer import create_trainer_from_names
 from bonfire.util import get_device
-from bonfire.util.yaml_util import parse_yaml_config, parse_training_config
+from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config
 
 device = get_device()
 
@@ -23,7 +23,7 @@ def run_training():
     dataset_name, model_name, n_repeats = parse_args()
 
     # Parse wandb config and get training config for this model
-    config = parse_yaml_config(dataset_name)
+    config = parse_yaml_benchmark_config(dataset_name)
     training_config = parse_training_config(config['training'], model_name)
 
     # Create trainer

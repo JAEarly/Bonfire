@@ -35,8 +35,8 @@ def load_class_dict_df():
 RAW_DATA_DIR = 'data/DGR/raw'
 TARGET_OUT_PATH = 'data/DGR/targets.csv'
 COVER_DIST_PATH = 'data/DGR/cover_dist.csv'
-METADATA_DF = load_metadata_df()
-CLASS_DICT_DF = load_class_dict_df()
+# METADATA_DF = load_metadata_df()
+# CLASS_DICT_DF = load_class_dict_df()
 
 basic_transform = transforms.Compose([transforms.ToTensor(),
                                       transforms.Normalize((0.2811, 0.3786, 0.4077), (0.0696, 0.0759, 0.1054))])

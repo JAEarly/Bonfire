@@ -7,7 +7,7 @@ from optuna import visualization as viz
 from bonfire.data.benchmark import get_dataset_clz
 from bonfire.model.benchmark import get_model_clz
 from bonfire.train.trainer import create_trainer_from_clzs
-from bonfire.util.yaml_util import parse_yaml_config, parse_training_config, parse_tuning_config, combine_configs
+from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config, parse_tuning_config, combine_configs
 
 TUNE_ROOT_DIR = "out/tune"
 
@@ -18,7 +18,7 @@ def create_tuner_from_config(device, model_name, dataset_name, study_name, n_tri
     dataset_clz = get_dataset_clz(dataset_name)
 
     # Load training and tuning configs
-    config = parse_yaml_config(dataset_name)
+    config = parse_yaml_benchmark_config(dataset_name)
     training_config = parse_training_config(config['training'], model_name)
     tuning_config = parse_tuning_config(config['tuning'], model_name)
 
