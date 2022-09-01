@@ -43,7 +43,10 @@ class FullyConnectedStack(nn.Module):
             in_size = d_in if i == 0 else ds_hid[i - 1]
             out_size = d_out if i == self.n_blocks - 1 else ds_hid[i]
             block_activation = final_activation_func if i == self.n_blocks - 1 else activation_func
-            blocks.append(FullyConnectedBlock(in_size, out_size, activation_func=block_activation, dropout=dropout))
+            block_dropout = 0 if i == self.n_blocks - 1 else dropout
+            blocks.append(FullyConnectedBlock(in_size, out_size,
+                                              activation_func=block_activation,
+                                              dropout=block_dropout))
         self.stack = nn.Sequential(*blocks)
 
     def forward(self, x):
