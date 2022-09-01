@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bonfire.data.benchmark import get_dataset_clz
-from bonfire.data.mil_graph_dataset import GraphDataloader
+# from bonfire.data.mil_graph_dataset import GraphDataloader
 from bonfire.model import models
 from bonfire.model.benchmark import get_model_clz
 from bonfire.train import metrics
@@ -72,7 +72,8 @@ def create_normal_dataloader(dataset, shuffle, n_workers):
 
 def create_graph_dataloader(dataset, shuffle, n_workers):
     # TODO batch_size and n_workers for Graph data loader
-    return GraphDataloader(dataset, shuffle)
+    # return GraphDataloader(dataset, shuffle)
+    raise NotImplementedError
 
 
 class Trainer:
