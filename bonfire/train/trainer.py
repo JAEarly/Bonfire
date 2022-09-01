@@ -44,20 +44,22 @@ def create_trainer_from_names(device, model_name, dataset_name):
     return create_trainer_from_clzs(device, model_clz, dataset_clz)
 
 
-def create_trainer_from_clzs(device, model_clz, dataset_clz):
+def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None):
     # Util function for checking if a model clz (m_clz) inherits from a list of base model classes (b_clzs)
     def check_clz_base_in(m_clz, b_clzs):
         return any([base_clz in b_clzs for base_clz in inspect.getmro(m_clz)])
 
     # Get dataloader based on what the model clz inherits from
-    normal_model_clzs = [models.InstanceSpaceNN, models.EmbeddingSpaceNN, models.AttentionNN, models.MiLstm]
-    graph_model_clzs = [models.ClusterGNN]
-    if check_clz_base_in(model_clz, normal_model_clzs):
-        dataloader_func = create_normal_dataloader
-    elif check_clz_base_in(model_clz, graph_model_clzs):
-        dataloader_func = create_graph_dataloader
-    else:
-        raise ValueError('No dataloader registered for model class {:}'.format(model_clz))
+    if dataloader_func is None:
+        print('Dataloader func not provided. Attempting to find based on model class.')
+        normal_model_clzs = [models.InstanceSpaceNN, models.EmbeddingSpaceNN, models.AttentionNN, models.MiLstm]
+        graph_model_clzs = [models.ClusterGNN]
+        if check_clz_base_in(model_clz, normal_model_clzs):
+            dataloader_func = create_normal_dataloader
+        elif check_clz_base_in(model_clz, graph_model_clzs):
+            dataloader_func = create_graph_dataloader
+        else:
+            raise ValueError('No dataloader func found for model class {:}'.format(model_clz))
 
     # Actually create the trainer
     return Trainer(device, model_clz, dataset_clz, dataloader_func)
