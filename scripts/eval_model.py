@@ -57,7 +57,8 @@ def evaluate(n_repeats, trainer, random_state=5):
         model = load_model(device, trainer.dataset_clz.name, trainer.model_clz, modifier=r)
         results_list = eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
                                      trainer.metric_clz, verbose=False)
-        results_arr[r, :] = results_list
+        train_results, _, val_results, _, test_results = results_list
+        results_arr[r, :] = [train_results, val_results, test_results]
         r += 1
         if r == n_repeats:
             break
