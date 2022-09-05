@@ -153,7 +153,8 @@ class Trainer:
         # epoch_train_metrics = metrics.eval_model(model, train_dataloader.dataset, criterion, self.metric_clz)
         epoch_val_metrics = None
         if val_dataloader is not None:
-            epoch_val_metrics, _ = metrics.eval_model(model, val_dataloader, self.metric_clz)
+            bag_metrics, _ = metrics.eval_model(model, val_dataloader, bag_metrics=(self.metric_clz,))
+            epoch_val_metrics = bag_metrics[0]
 
         return epoch_train_metrics, epoch_val_metrics
 
@@ -259,8 +260,11 @@ class Trainer:
         # Perform final eval and log with wandb
         sleep(0.1)
         results = metrics.eval_complete(best_model, train_dataloader, val_dataloader, test_dataloader,
-                                        self.metric_clz, verbose=verbose)
+                                        bag_metrics=(self.metric_clz,), verbose=verbose)
         train_results, _, val_results, _, test_results, _ = results
+        train_results = train_results[0]
+        val_results = val_results[0]
+        test_results = test_results[0]
         train_results.wandb_summary('train')
         val_results.wandb_summary('val')
         test_results.wandb_summary('test')
