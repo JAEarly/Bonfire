@@ -26,6 +26,7 @@ class MilDataset(Dataset, ABC):
     @property
     @abstractmethod
     def d_in(cls):
+        # TODO remove
         pass
 
     @classmethod
