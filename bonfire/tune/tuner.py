@@ -29,11 +29,11 @@ def create_tuner_from_config(device, model_name, dataset_name, study_name, n_tri
 class Tuner:
 
     def __init__(self, device, model_clz, dataset_clz, study_name, training_config, tuning_config, n_trials,
-                 dataloader_func=None):
+                 dataloader_func=None, project_name=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
-        self.project_name = 'Tune_{:s}'.format(self.dataset_clz.name)
+        self.project_name = project_name if project_name is not None else 'Tune_{:s}'.format(self.dataset_clz.name)
         self.study_name = study_name
         self.training_config = training_config
         self.tuning_config = tuning_config
