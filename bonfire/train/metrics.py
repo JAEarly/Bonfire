@@ -9,7 +9,6 @@ import wandb
 from sklearn.metrics import accuracy_score, confusion_matrix
 from texttable import Texttable
 from torch import nn
-from torchmetrics import JaccardIndex
 from tqdm import tqdm
 
 
@@ -38,7 +37,7 @@ class Metric(ABC):
 
     @staticmethod
     @abstractmethod
-    def calculate_metric(probas, targets, labels, n=None):
+    def calculate_metric(probas, targets, labels):
         pass
 
     @staticmethod
@@ -80,7 +79,7 @@ class ClassificationMetric(Metric):
         return lambda outputs, targets: nn.CrossEntropyLoss()(outputs, targets.long())
 
     @staticmethod
-    def calculate_metric(preds, targets, labels, n=None):
+    def calculate_metric(preds, targets, labels):
         _, probas = torch.max(F.softmax(preds, dim=1), dim=1)
         acc = accuracy_score(targets.long(), probas)
         loss = ClassificationMetric.criterion()(preds, targets).item()
@@ -133,7 +132,7 @@ class RegressionMetric(Metric):
         return lambda outputs, targets: torch.sqrt(nn.MSELoss()(outputs.squeeze(), targets.squeeze()))
 
     @staticmethod
-    def calculate_metric(preds, targets, labels, n=None):
+    def calculate_metric(preds, targets, labels):
         rmse_loss = RegressionMetric.criterion()(preds, targets).item()
         mae_loss = nn.L1Loss()(preds.squeeze(), targets.squeeze()).item()
         return RegressionMetric(rmse_loss, mae_loss)
@@ -163,38 +162,56 @@ class RegressionMetric(Metric):
         wandb.summary["{:s}_mae".format(dataset_split)] = self.mae_loss
 
 
-class JaccardIndexMetric(Metric):
+class IoUMetric(Metric):
 
     optimise_direction = 'maximize'
 
-    def __init__(self, jaccard_index):
-        self.jaccard_index = jaccard_index
+    def __init__(self, mean_iou, clz_iou):
+        self.mean_iou = mean_iou
+        self.clz_iou = clz_iou
 
     def key_metric(self):
-        return self.jaccard_index
+        return self.mean_iou
 
     @staticmethod
     def criterion():
         pass
 
     @staticmethod
-    def calculate_metric(predictions, targets, labels, n=None, epsilon=1e-6):
-        grid_size = int((len(predictions) / n) ** 0.5)
-        grid_predictions = predictions.view(n, grid_size, grid_size, len(labels))
-        grid_targets = targets.view(n, grid_size, grid_size, len(labels))
-        grid_clz_predictions = torch.argmax(grid_predictions, dim=3).long()
-        grid_clz_targets = torch.argmax(grid_targets, dim=3).long()
-        return JaccardIndexMetric(JaccardIndex(num_classes=len(labels))(grid_clz_predictions, grid_clz_targets))
+    def calculate_metric(predictions, targets, labels):
+        mean_iou, clz_iou, _, _ = IoUMetric.intersection_over_union(predictions, targets, len(labels))
+        return IoUMetric(mean_iou, clz_iou)
+
+    @staticmethod
+    def intersection_over_union(true_labels, pred_labels, num_classes, eps=1e-6):
+        mask = (true_labels >= 0) & (true_labels < num_classes)
+        hist = torch.bincount(
+            num_classes * true_labels[mask] + pred_labels[mask],
+            minlength=num_classes ** 2,
+        ).reshape(num_classes, num_classes).float()
+        intersection = torch.diag(hist)
+        union = hist.sum(dim=0) + hist.sum(dim=1) - intersection + eps
+        clz_iou = intersection / (union + eps)
+        mean_iou = torch.nanmean(clz_iou)
+        return mean_iou, clz_iou, intersection, union
+
+    @staticmethod
+    def calculate_from_cumulative(intersections, unions):
+        sum_intersection = torch.sum(intersections, dim=0)
+        sum_union = torch.sum(unions, dim=0)
+        clz_iou = sum_intersection / sum_union
+        mean_iou = torch.nanmean(clz_iou)
+        return mean_iou, clz_iou
 
     @staticmethod
     def from_train_loss(train_loss):
         pass
 
     def short_string_repr(self):
-        return "Mean Jaccard Index: {:.3f}".format(self.jaccard_index)
+        return "Mean IoU: {:.3f}".format(self.mean_iou)
 
     def out(self):
-        print("Mean Jaccard Index: {:.3f}".format(self.jaccard_index))
+        print("Mean IoU: {:.3f}".format(self.mean_iou))
 
     def wandb_log(self, dataset_split, commit):
         raise NotImplementedError()
@@ -264,9 +281,7 @@ def eval_model(model, dataloader, bag_metrics=(), instance_metrics=(), verbose=F
     if bag_metrics:
         all_preds = torch.cat(all_preds)
         all_targets = torch.cat(all_targets)
-        bag_results = \
-            [bag_metric.calculate_metric(all_preds, all_targets, labels, n=len(all_preds))
-             for bag_metric in bag_metrics]
+        bag_results = [bm.calculate_metric(all_preds, all_targets, labels) for bm in bag_metrics]
         if verbose:
             for bag_result in bag_results:
                 bag_result.out()
@@ -276,9 +291,8 @@ def eval_model(model, dataloader, bag_metrics=(), instance_metrics=(), verbose=F
     if instance_metrics:
         all_instance_preds = torch.cat(all_instance_preds)
         all_instance_targets = torch.cat(all_instance_targets)
-        instance_results = \
-            [instance_metric.calculate_metric(all_instance_preds, all_instance_targets, labels, n=len(all_preds))
-             for instance_metric in instance_metrics]
+        instance_results = [im.calculate_metric(all_instance_preds, all_instance_targets, labels)
+                            for im in instance_metrics]
         if verbose:
             for instance_result in instance_results:
                 instance_result.out()
@@ -286,23 +300,23 @@ def eval_model(model, dataloader, bag_metrics=(), instance_metrics=(), verbose=F
     return bag_results, instance_results
 
 
-def output_results(model_names, results_arr, sort=True):
+def output_results(model_names, results_arr, sort=True, latex=False):
     n_models, n_repeats, n_splits = results_arr.shape
     assert n_models == len(model_names)
     assert n_splits == 3
 
     results_type = type(results_arr[0][0][0])
     if results_type == ClassificationMetric:
-        output_classification_results(model_names, results_arr, sort=sort)
+        output_classification_results(model_names, results_arr, sort=sort, latex=latex)
     elif issubclass(results_type, RegressionMetric):
-        output_regression_results(model_names, results_arr, sort=sort)
-    elif results_type == JaccardIndexMetric:
-        output_jaccard_results(model_names, results_arr, sort=sort)
+        output_regression_results(model_names, results_arr, sort=sort, latex=latex)
+    elif results_type == IoUMetric:
+        output_iou_results(model_names, results_arr, sort=sort, latex=latex)
     else:
         raise NotImplementedError('No results output for metrics {:}'.format(results_type))
 
 
-def output_classification_results(model_names, results_arr, sort=True):
+def output_classification_results(model_names, results_arr, sort=True, latex=False):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 6), dtype=object)
     mean_test_accuracies = []
@@ -329,10 +343,11 @@ def output_classification_results(model_names, results_arr, sort=True):
     table.add_rows(rows)
     table.set_max_width(0)
     print(table.draw())
-    print(latextable.draw_latex(table))
+    if latex:
+        print(latextable.draw_latex(table))
 
 
-def output_regression_results(model_names, results_arr, sort=True):
+def output_regression_results(model_names, results_arr, sort=True, latex=False):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 6), dtype=object)
     mean_test_mae_losses = []
@@ -359,28 +374,29 @@ def output_regression_results(model_names, results_arr, sort=True):
     table.add_rows(rows)
     table.set_max_width(0)
     print(table.draw())
-    print(latextable.draw_latex(table))
+    if latex:
+        print(latextable.draw_latex(table))
 
 
-def output_jaccard_results(model_names, results_arr, sort=True):
+def output_iou_results(model_names, results_arr, sort=True, latex=False):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 3), dtype=object)
-    mean_test_jaccard_indices = []
+    mean_test_ious = []
     for model_idx in range(n_models):
         model_results = results_arr[model_idx]
         expanded_model_results = np.empty((n_repeats, 3), dtype=float)
         for repeat_idx in range(n_repeats):
             train_results, val_results, test_results = model_results[repeat_idx]
-            expanded_model_results[repeat_idx, :] = [train_results.jaccard_index,
-                                                     val_results.jaccard_index,
-                                                     test_results.jaccard_index]
+            expanded_model_results[repeat_idx, :] = [train_results.mean_iou,
+                                                     val_results.mean_iou,
+                                                     test_results.mean_iou]
         mean = np.mean(expanded_model_results, axis=0)
         sem = np.std(expanded_model_results, axis=0) / np.sqrt(len(expanded_model_results))
-        mean_test_jaccard_indices.append(mean[2])
+        mean_test_ious.append(mean[2])
         for metric_idx in range(3):
             results[model_idx, metric_idx] = '{:.4f} +- {:.4f}'.format(mean[metric_idx], sem[metric_idx])
-    model_order = np.argsort(mean_test_jaccard_indices) if sort else list(range(len(model_names)))
-    rows = [['Model Name', 'Train Jaccard Index', 'Val Jaccard Index', 'Test Jaccard Index']]
+    model_order = np.argsort(mean_test_ious) if sort else list(range(len(model_names)))
+    rows = [['Model Name', 'Train IoU', 'Val IoU', 'Test IoU']]
     for model_idx in model_order:
         rows.append([model_names[model_idx]] + list(results[model_idx, :]))
     table = Texttable()
@@ -389,4 +405,5 @@ def output_jaccard_results(model_names, results_arr, sort=True):
     table.add_rows(rows)
     table.set_max_width(0)
     print(table.draw())
-    print(latextable.draw_latex(table))
+    if latex:
+        print(latextable.draw_latex(table))
