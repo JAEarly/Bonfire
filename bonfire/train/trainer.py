@@ -44,7 +44,7 @@ def create_trainer_from_names(device, model_name, dataset_name, project_name=Non
     return create_trainer_from_clzs(device, model_clz, dataset_clz, project_name=project_name)
 
 
-def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None):
+def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None, group_name=None):
     # Util function for checking if a model clz (m_clz) inherits from a list of base model classes (b_clzs)
     def check_clz_base_in(m_clz, b_clzs):
         return any([base_clz in b_clzs for base_clz in inspect.getmro(m_clz)])
@@ -62,7 +62,7 @@ def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=Non
             raise ValueError('No dataloader func found for model class {:}'.format(model_clz))
 
     # Actually create the trainer
-    return Trainer(device, model_clz, dataset_clz, dataloader_func, project_name=project_name)
+    return Trainer(device, model_clz, dataset_clz, dataloader_func, project_name=project_name, group_name=group_name)
 
 
 def create_normal_dataloader(dataset, shuffle, n_workers):
@@ -78,15 +78,15 @@ def create_graph_dataloader(dataset, shuffle, n_workers):
 
 class Trainer:
 
-    def __init__(self, device, model_clz, dataset_clz, dataloader_func, project_name=None):
+    def __init__(self, device, model_clz, dataset_clz, dataloader_func, project_name=None, group_name=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
         self.dataloader_func = dataloader_func
         self.model_name = self.model_clz.name
         self.dataset_name = self.dataset_clz.name
-        self.project_name = project_name if project_name is not None else 'Train_{:s}'.format(self.dataset_clz.name)
-        self.group_name = 'Train_{:s}'.format(self.model_name)
+        self.project_name = project_name if project_name is not None else 'Train_{:s}'.format(self.dataset_name)
+        self.group_name = group_name if group_name is not None else 'Train_{:s}'.format(self.model_name)
 
     @property
     def metric_clz(self):
