@@ -166,9 +166,10 @@ class IoUMetric(Metric):
 
     optimise_direction = 'maximize'
 
-    def __init__(self, mean_iou, clz_iou):
+    def __init__(self, mean_iou, clz_iou, conf_mat):
         self.mean_iou = mean_iou
         self.clz_iou = clz_iou
+        self.conf_mat = conf_mat
 
     def key_metric(self):
         return self.mean_iou
@@ -179,29 +180,31 @@ class IoUMetric(Metric):
 
     @staticmethod
     def calculate_metric(predictions, targets, labels):
-        mean_iou, clz_iou, _, _ = IoUMetric.intersection_over_union(predictions, targets, len(labels))
-        return IoUMetric(mean_iou, clz_iou)
+        mean_iou, clz_iou, conf_mat = IoUMetric.intersection_over_union(predictions, targets, len(labels))
+        return IoUMetric(mean_iou, clz_iou, conf_mat)
 
     @staticmethod
     def intersection_over_union(true_labels, pred_labels, num_classes, eps=1e-6):
         mask = (true_labels >= 0) & (true_labels < num_classes)
-        hist = torch.bincount(
+        conf_mat = torch.bincount(
             num_classes * true_labels[mask] + pred_labels[mask],
             minlength=num_classes ** 2,
         ).reshape(num_classes, num_classes).float()
-        intersection = torch.diag(hist)
-        union = hist.sum(dim=0) + hist.sum(dim=1) - intersection + eps
+        intersection = torch.diag(conf_mat)
+        union = conf_mat.sum(dim=0) + conf_mat.sum(dim=1) - intersection + eps
         clz_iou = intersection / (union + eps)
         mean_iou = torch.nanmean(clz_iou)
-        return mean_iou, clz_iou, intersection, union
+        return mean_iou, clz_iou, conf_mat
 
     @staticmethod
-    def calculate_from_cumulative(intersections, unions):
-        sum_intersection = torch.sum(intersections, dim=0)
-        sum_union = torch.sum(unions, dim=0)
-        clz_iou = sum_intersection / sum_union
+    def calculate_from_cumulative(conf_mats, eps=1e-6):
+        conf_mats = torch.stack(conf_mats)
+        conf_mat = torch.mean(conf_mats, dim=0)
+        intersection = torch.diag(conf_mat)
+        union = conf_mat.sum(dim=0) + conf_mat.sum(dim=1) - intersection + eps
+        clz_iou = intersection / union
         mean_iou = torch.nanmean(clz_iou)
-        return mean_iou, clz_iou
+        return mean_iou, clz_iou, conf_mat
 
     @staticmethod
     def from_train_loss(train_loss):
