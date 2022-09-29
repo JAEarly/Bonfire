@@ -10,7 +10,6 @@ from tqdm import tqdm
 
 from bonfire.data.benchmark import get_dataset_clz
 # from bonfire.data.mil_graph_dataset import GraphDataloader
-from bonfire.model import models
 from bonfire.model.benchmark import get_model_clz
 from bonfire.train import metrics
 from bonfire.util import save_model

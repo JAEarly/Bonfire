@@ -2,8 +2,7 @@ import wandb
 from torch import nn
 
 from bonfire.data.benchmark.mnist.mnist_bags import FourMnistBagsDataset
-from bonfire.model import aggregator as agg
-from bonfire.model import models
+from bonfire.model import mil_aggregators as agg
 from bonfire.model import modules as mod
 
 

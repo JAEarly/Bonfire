@@ -3,104 +3,97 @@ from abc import ABC
 import torch
 from torch import nn
 
-from bonfire.model import modules as mod
+from model.model_base import FullyConnectedStack
+from model.nn_models import MultipleInstanceNN
 
 
-class Aggregator(nn.Module, ABC):
+class MiLstm(MultipleInstanceNN, ABC):
 
-    def __init__(self):
+    def __init__(self, device, n_classes, n_expec_dims, encoder, aggregator):
+        super().__init__(device, n_classes, n_expec_dims)
+        self.encoder = encoder
+        self.aggregator = aggregator
+
+    def _internal_forward(self, bags):
+        bag_predictions = torch.zeros((len(bags), self.n_classes)).to(self.device)
+        all_cumulative_bag_predictions = []
+
+        # First pass: get instance embeddings, bag embeddings, and bag predictions.
+        for i, instances in enumerate(bags):
+            instances = instances.to(self.device)
+            instance_embeddings = self.encoder(instances)
+            bag_prediction, cumulative_bag_predictions = self.aggregator(instance_embeddings)
+            bag_predictions[i] = bag_prediction
+            all_cumulative_bag_predictions.append(cumulative_bag_predictions)
+
+        return bag_predictions, all_cumulative_bag_predictions
+
+    def partial_forward(self, instance, hidden_state, cell_state, prev_cumulative_bag_prediction):
+        # Embed the instance
+        instance = instance.to(self.device)
+        instance_embedding = self.encoder(instance)
+        # Pass the embedding through the aggregator with the given states
+        agg_out = self.aggregator.partial_forward(instance_embedding, hidden_state, cell_state,
+                                                  prev_cumulative_bag_prediction)
+        # Return instance predictions and new states
+        instance_prediction, new_hidden_state, new_cell_state = agg_out
+        return instance_prediction, new_hidden_state, new_cell_state
+
+    def get_hidden_states(self, bag):
+        instances = bag.to(self.device)
+        instance_embeddings = self.encoder(instances)
+        _, hidden_states = self.aggregator.lstm_block(torch.unsqueeze(instance_embeddings, 0))
+        return hidden_states.squeeze()
+
+    def flatten_parameters(self):
+        self.aggregator.flatten_parameters()
+
+
+class LstmBlock(nn.Module):
+
+    def __init__(self, d_in, d_hid, n_layers, bidirectional, dropout):
         super().__init__()
+        # For the LSTM block, a non-zero dropout expects num_layers greater than 1
+        self.lstm = nn.LSTM(input_size=d_in, hidden_size=d_hid, num_layers=n_layers,
+                            bidirectional=bidirectional, batch_first=True, dropout=0 if n_layers == 1 else dropout)
+        self.bidirectional = bidirectional
+        self.d_hid = d_hid
+        self.dropout = nn.Dropout(p=dropout)
+        self.init_hidden = nn.Parameter(torch.zeros(2 * n_layers if bidirectional else n_layers, 1, d_hid))
+        self.init_cell = nn.Parameter(torch.zeros(2 * n_layers if bidirectional else n_layers, 1, d_hid))
 
-    @staticmethod
-    def _parse_agg_method(agg_func_name):
-        # TODO ensure these are the correct shape
-        if agg_func_name == 'mean':
-            def mean_agg(x):
-                if len(x.shape) == 1:  # n_instances
-                    return torch.mean(x)
-                elif len(x.shape) == 2:  # n_instances * encoding_dim
-                    return torch.mean(x, dim=0)
-                raise NotImplementedError('Check shape!')
-            return mean_agg
-        if agg_func_name == 'max':
-            def max_agg(x):
-                if len(x.shape) == 1:  # n_instances
-                    return torch.max(x)
-                elif len(x.shape) == 2:  # n_instances * encoding_dim
-                    return torch.max(x, dim=0)[0]
-                raise NotImplementedError('Check shape!')
-            return max_agg
-        if agg_func_name == 'sum':
-            def sum_agg(x):
-                if len(x.shape) == 1:   # n_instances
-                    return torch.sum(x)
-                elif len(x.shape) == 2:  # n_instances * encoding_dim
-                    return torch.sum(x, dim=0)
-                raise NotImplementedError('Check shape!')
-            return sum_agg
-        raise ValueError('Invalid aggregation function name for Instance Aggregator: {:s}'.format(agg_func_name))
+    def forward(self, x):
+        _, n_instances, _ = x.shape
 
+        # Pass through lstm
+        out, (ht, _) = self.lstm(x, (self.init_hidden, self.init_cell))
 
-class InstanceAggregator(Aggregator):
+        # Get lstm output
+        if self.bidirectional:
+            out_split = out.view(1, n_instances, 2, self.d_hid)
+            forward_out = out_split[:, :, 0, :]
+            backward_out = out_split[:, :, 1, :]
+            bag_repr = torch.cat([forward_out[:, -1, :], backward_out[:, 0, :]], dim=1)
+        else:
+            bag_repr = out[:, -1, :]
 
-    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_final_activation_func=None):
-        super().__init__()
-        self.instance_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes,
-                                                           dropout=dropout,
-                                                           final_activation_func=classifier_final_activation_func)
-        self.aggregation_func = self._parse_agg_method(agg_func_name)
+        # bag_repr = self.dropout(bag_repr)
+        # out = self.dropout(out)
+        return bag_repr, out
 
-    def forward(self, instance_embeddings):
-        instance_predictions = self.instance_classifier(instance_embeddings)
-        bag_prediction = self.aggregation_func(instance_predictions)
-        return bag_prediction, instance_predictions
+    def partial_forward(self, instance_embedding, hidden_state, cell_state):
+        # Forward pass but we already have a hidden and cell state, and are only doing it for one instance
+        instance_embedding = instance_embedding.unsqueeze(0).unsqueeze(0)  # Need a 3D input, currently 1D
+        out, (new_hidden_state, new_cell_state) = self.lstm(instance_embedding, (hidden_state, cell_state))
+        bag_repr = out[:, -1, :]
+        bag_repr = self.dropout(bag_repr)
+        return bag_repr, new_hidden_state, new_cell_state
+
+    def flatten_parameters(self):
+        self.lstm.flatten_parameters()
 
 
-class EmbeddingAggregator(Aggregator):
-
-    def __init__(self, d_in, ds_hid, n_classes, dropout, agg_func_name, classifier_final_activation_func=None):
-        super().__init__()
-        self.aggregation_func = self._parse_agg_method(agg_func_name)
-        self.embedding_classifier = mod.FullyConnectedStack(d_in, ds_hid, n_classes,
-                                                            dropout=dropout,
-                                                            final_activation_func=classifier_final_activation_func)
-
-    def forward(self, instance_embeddings):
-        bag_embedding = self.aggregation_func(instance_embeddings)
-        bag_prediction = self.embedding_classifier(bag_embedding)
-        return bag_prediction, None
-
-
-class MultiHeadAttentionAggregator(Aggregator):
-
-    def __init__(self, n_heads, d_in, ds_hid, d_attn, n_classes, dropout):
-        super().__init__()
-        self.attention_aggregator = mod.MultiHeadAttentionBlock(n_heads, d_in, d_attn, dropout)
-        self.embedding_classifier = mod.FullyConnectedStack(n_heads * d_in, ds_hid, n_classes,
-                                                            dropout=dropout, final_activation_func=None)
-
-    def forward(self, instance_embeddings):
-        bag_embedding, attn = self.attention_aggregator(instance_embeddings)
-        bag_prediction = self.embedding_classifier(bag_embedding)
-        return bag_prediction, attn
-
-
-class CountAggregator(Aggregator):
-
-    def __init__(self, base_aggregator):
-        super().__init__()
-        self.base_aggregator = base_aggregator
-        self.relu = torch.nn.ReLU()
-
-    def forward(self, instance_embeddings):
-        bag_prediction, instance_attributions = self.base_aggregator(instance_embeddings)
-        bag_prediction = self.relu(bag_prediction)
-        # print(bag_prediction)
-        # print(instance_attributions)
-        return bag_prediction, instance_attributions
-
-
-class LstmEmbeddingSpaceAggregator(Aggregator):
+class LstmEmbeddingSpaceAggregator(nn.Module):
     """
     An LSTM Aggregator that only makes the bag prediction based on the final hidden state.
     """
@@ -108,11 +101,11 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
     def __init__(self, d_in, d_hid, n_lstm_layers, bidirectional, dropout, ds_hid, n_classes,
                  classifier_final_activation_func=None):
         super().__init__()
-        self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, bidirectional, dropout)
+        self.lstm_block = LstmBlock(d_in, d_hid, n_lstm_layers, bidirectional, dropout)
         self.embedding_size = d_hid * 2 if bidirectional else d_hid
-        self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            final_activation_func=classifier_final_activation_func,
-                                                            dropout=dropout)
+        self.embedding_classifier = FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
+                                                        final_activation_func=classifier_final_activation_func,
+                                                        dropout=dropout)
 
     def forward(self, instance_embeddings):
         # Pass through lstm block. Unsqueeze as lstm block expects a 3D input
@@ -146,7 +139,7 @@ class LstmEmbeddingSpaceAggregator(Aggregator):
         self.lstm_block.flatten_parameters()
 
 
-class LstmInstanceSpaceAggregator(Aggregator):
+class LstmInstanceSpaceAggregator(nn.Module):
     """
     An LSTM Aggregator that makes the bag prediction by predicting over all cumulative hidden states and then
     performing some aggregation (e.g., mean, sum) over all the instance predictions.
@@ -156,11 +149,11 @@ class LstmInstanceSpaceAggregator(Aggregator):
     def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
                  classifier_final_activation_func=None):
         super().__init__()
-        self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
+        self.lstm_block = LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
-        self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            final_activation_func=classifier_final_activation_func,
-                                                            dropout=dropout)
+        self.embedding_classifier = FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
+                                                        final_activation_func=classifier_final_activation_func,
+                                                        dropout=dropout)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
     def forward(self, instance_embeddings):
@@ -189,7 +182,7 @@ class LstmInstanceSpaceAggregator(Aggregator):
         self.lstm_block.flatten_parameters()
 
 
-class LstmASCInstanceSpaceAggregator(Aggregator):
+class LstmASCInstanceSpaceAggregator(nn.Module):
     """
     Additive Skip Connections
     An LSTM Aggregator that makes the bag prediction by predicting over all cumulative hidden states added to
@@ -200,11 +193,11 @@ class LstmASCInstanceSpaceAggregator(Aggregator):
     def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
                  classifier_final_activation_func=None):
         super().__init__()
-        self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
+        self.lstm_block = LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_hid
-        self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            final_activation_func=classifier_final_activation_func,
-                                                            dropout=dropout)
+        self.embedding_classifier = FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
+                                                        final_activation_func=classifier_final_activation_func,
+                                                        dropout=dropout)
         self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 
@@ -228,7 +221,7 @@ class LstmASCInstanceSpaceAggregator(Aggregator):
         self.lstm_block.flatten_parameters()
 
 
-class LstmCSCInstanceSpaceAggregator(Aggregator):
+class LstmCSCInstanceSpaceAggregator(nn.Module):
     """
     Concatenated Skip Connections
     An LSTM Aggregator that makes the bag prediction by predicting over all cumulative hidden states concatenated to
@@ -239,11 +232,11 @@ class LstmCSCInstanceSpaceAggregator(Aggregator):
     def __init__(self, d_in, d_hid, n_lstm_layers, dropout, ds_hid, n_classes, agg_func_name,
                  classifier_final_activation_func=None):
         super().__init__()
-        self.lstm_block = mod.LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
+        self.lstm_block = LstmBlock(d_in, d_hid, n_lstm_layers, False, dropout)
         self.embedding_size = d_in + d_hid
-        self.embedding_classifier = mod.FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
-                                                            final_activation_func=classifier_final_activation_func,
-                                                            dropout=dropout)
+        self.embedding_classifier = FullyConnectedStack(self.embedding_size, ds_hid, n_classes,
+                                                        final_activation_func=classifier_final_activation_func,
+                                                        dropout=dropout)
         # self.skip_projection = nn.Linear(d_in, d_hid)
         self.aggregation_func = self._parse_agg_method(agg_func_name)
 

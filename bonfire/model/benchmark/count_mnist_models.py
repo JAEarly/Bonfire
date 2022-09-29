@@ -1,8 +1,7 @@
 from overrides import overrides
 
 from bonfire.data.benchmark.mnist.mnist_bags import CountMnistBagsDataset
-from bonfire.model import aggregator as agg
-from bonfire.model import models
+from bonfire.model import mil_aggregators as agg
 from bonfire.model.benchmark.four_mnist_models import MnistEncoder
 
 

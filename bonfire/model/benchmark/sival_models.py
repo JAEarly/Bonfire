@@ -1,8 +1,7 @@
 from overrides import overrides
 
 from bonfire.data.benchmark.sival.sival_dataset import SivalDataset
-from bonfire.model import aggregator as agg
-from bonfire.model import models
+from bonfire.model import mil_aggregators as agg
 from bonfire.model import modules as mod
 
 

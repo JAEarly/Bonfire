@@ -3,8 +3,7 @@ from overrides import overrides
 from torch import nn
 
 from bonfire.data.benchmark.dgr.dgr_dataset import DgrDataset
-from bonfire.model import aggregator as agg
-from bonfire.model import models
+from bonfire.model import mil_aggregators as agg
 from bonfire.model import modules as mod
 
 
