@@ -1,5 +1,5 @@
 import copy
-import inspect
+from time import sleep
 
 import numpy as np
 import optuna
@@ -8,21 +8,8 @@ import wandb
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from bonfire.data.benchmark import get_dataset_clz
-# from bonfire.data.mil_graph_dataset import GraphDataloader
-from bonfire.model.benchmark import get_model_clz
 from bonfire.train import metrics
 from bonfire.util import save_model
-from time import sleep
-
-
-# -- UNUSED --
-# def info_loss(outputs, targets, mi_scores):
-#     prediction_loss = nn.CrossEntropyLoss()(outputs, targets.long())
-#     mean_mi_scores = torch.mean(mi_scores, dim=0)
-#     mi_global, mi_local, mi_prior = mean_mi_scores[0], mean_mi_scores[1], mean_mi_scores[2]
-#     mi_loss = 0.8 * mi_global + 0.1 * mi_local + 0.1 * mi_prior
-#     return prediction_loss, mi_loss, mean_mi_scores
 
 
 def mil_collate_function(batch):
@@ -34,54 +21,12 @@ def mil_collate_function(batch):
     return [data, target]
 
 
-def create_trainer_from_names(device, model_name, dataset_name, project_name=None):
-    # Parse model and dataset classes
-    model_clz = get_model_clz(dataset_name, model_name)
-    dataset_clz = get_dataset_clz(dataset_name)
-
-    # Create the trainer
-    return create_trainer_from_clzs(device, model_clz, dataset_clz, project_name=project_name)
-
-
-def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None, group_name=None):
-    # Util function for checking if a model clz (m_clz) inherits from a list of base model classes (b_clzs)
-    def check_clz_base_in(m_clz, b_clzs):
-        return any([base_clz in b_clzs for base_clz in inspect.getmro(m_clz)])
-
-    # Get dataloader based on what the model clz inherits from
-    if dataloader_func is None:
-        print('Dataloader func not provided. Attempting to find based on model class.')
-        normal_model_clzs = [models.InstanceSpaceNN, models.EmbeddingSpaceNN, models.AttentionNN, models.MiLstm]
-        graph_model_clzs = [models.ClusterGNN]
-        if check_clz_base_in(model_clz, normal_model_clzs):
-            dataloader_func = create_normal_dataloader
-        elif check_clz_base_in(model_clz, graph_model_clzs):
-            dataloader_func = create_graph_dataloader
-        else:
-            raise ValueError('No dataloader func found for model class {:}'.format(model_clz))
-
-    # Actually create the trainer
-    return Trainer(device, model_clz, dataset_clz, dataloader_func, project_name=project_name, group_name=group_name)
-
-
-def create_normal_dataloader(dataset, shuffle, n_workers):
-    # TODO not using batch size
-    return DataLoader(dataset, shuffle=shuffle, batch_size=1, num_workers=n_workers)
-
-
-def create_graph_dataloader(dataset, shuffle, n_workers):
-    # TODO batch_size and n_workers for Graph data loader
-    # return GraphDataloader(dataset, shuffle)
-    raise NotImplementedError
-
-
 class Trainer:
 
-    def __init__(self, device, model_clz, dataset_clz, dataloader_func, project_name=None, group_name=None):
+    def __init__(self, device, model_clz, dataset_clz, project_name=None, group_name=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
-        self.dataloader_func = dataloader_func
         self.model_name = self.model_clz.name
         self.dataset_name = self.dataset_clz.name
         self.project_name = project_name if project_name is not None else 'Train_{:s}'.format(self.dataset_name)
@@ -95,8 +40,10 @@ class Trainer:
     def criterion(self):
         return self.metric_clz.criterion()
 
-    def create_dataloader(self, dataset, shuffle, n_workers):
-        return self.dataloader_func(dataset, shuffle, n_workers)
+    @staticmethod
+    def create_dataloader(dataset, shuffle, n_workers):
+        # TODO not using batch size
+        return DataLoader(dataset, shuffle=shuffle, batch_size=1, num_workers=n_workers)
 
     def create_model(self):
         return self.model_clz(self.device)
@@ -112,32 +59,21 @@ class Trainer:
     def train_epoch(self, model, optimizer, criterion, train_dataloader, val_dataloader):
         model.train()
         epoch_train_loss = 0
-        # epoch_prediction_loss = 0
-        # epoch_mi_loss = 0
-        # epoch_mi_sub_losses = torch.zeros(3)
+
         for data in tqdm(train_dataloader, desc='Epoch Progress', leave=False):
             bags, targets = data[0], data[1].to(self.device)
             optimizer.zero_grad()
             outputs = model(bags)
-            # outputs, mi_scores = model(bags)
             loss = criterion(outputs, targets)
-            # prediction_loss, mi_loss, mi_sub_losses = criterion(outputs, targets, mi_scores)
-            # loss = prediction_loss + mi_loss
             loss.backward()
             optimizer.step()
             epoch_train_loss += loss.item()
-            # epoch_prediction_loss += prediction_loss.item()
-            # epoch_mi_loss += mi_loss.item()
-            # epoch_mi_sub_losses += mi_sub_losses.detach()
 
+        # Compute train metrics (from running loss)
         epoch_train_loss /= len(train_dataloader)
-        # epoch_prediction_loss /= len(train_dataloader)
-
-        # epoch_mi_loss /= len(train_dataloader)
-        # epoch_mi_sub_losses /= len(train_dataloader)
-
         epoch_train_metrics = self.metric_clz.from_train_loss(epoch_train_loss)
-        # epoch_train_metrics = metrics.eval_model(model, train_dataloader.dataset, criterion, self.metric_clz)
+
+        # Compute val metrics
         epoch_val_metrics = None
         if val_dataloader is not None:
             bag_metrics, _ = metrics.eval_model(model, val_dataloader, bag_metrics=(self.metric_clz,))
@@ -298,4 +234,4 @@ class Trainer:
         if verbose:
             metrics.output_results([self.model_name], results_arr)
 
-        return models, results_arr
+        return best_models, results_arr
