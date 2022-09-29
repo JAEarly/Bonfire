@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bonfire.data.benchmark import get_dataset_clz
-from bonfire.data.mil_graph_dataset import GraphDataloader
+# from bonfire.data.mil_graph_dataset import GraphDataloader
 from bonfire.model import models
 from bonfire.model.benchmark import get_model_clz
 from bonfire.train import metrics
@@ -35,32 +35,34 @@ def mil_collate_function(batch):
     return [data, target]
 
 
-def create_trainer_from_names(device, model_name, dataset_name):
+def create_trainer_from_names(device, model_name, dataset_name, project_name=None):
     # Parse model and dataset classes
     model_clz = get_model_clz(dataset_name, model_name)
     dataset_clz = get_dataset_clz(dataset_name)
 
     # Create the trainer
-    return create_trainer_from_clzs(device, model_clz, dataset_clz)
+    return create_trainer_from_clzs(device, model_clz, dataset_clz, project_name=project_name)
 
 
-def create_trainer_from_clzs(device, model_clz, dataset_clz):
+def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None, group_name=None):
     # Util function for checking if a model clz (m_clz) inherits from a list of base model classes (b_clzs)
     def check_clz_base_in(m_clz, b_clzs):
         return any([base_clz in b_clzs for base_clz in inspect.getmro(m_clz)])
 
     # Get dataloader based on what the model clz inherits from
-    normal_model_clzs = [models.InstanceSpaceNN, models.EmbeddingSpaceNN, models.AttentionNN, models.MiLstm]
-    graph_model_clzs = [models.ClusterGNN]
-    if check_clz_base_in(model_clz, normal_model_clzs):
-        dataloader_func = create_normal_dataloader
-    elif check_clz_base_in(model_clz, graph_model_clzs):
-        dataloader_func = create_graph_dataloader
-    else:
-        raise ValueError('No dataloader registered for model class {:}'.format(model_clz))
+    if dataloader_func is None:
+        print('Dataloader func not provided. Attempting to find based on model class.')
+        normal_model_clzs = [models.InstanceSpaceNN, models.EmbeddingSpaceNN, models.AttentionNN, models.MiLstm]
+        graph_model_clzs = [models.ClusterGNN]
+        if check_clz_base_in(model_clz, normal_model_clzs):
+            dataloader_func = create_normal_dataloader
+        elif check_clz_base_in(model_clz, graph_model_clzs):
+            dataloader_func = create_graph_dataloader
+        else:
+            raise ValueError('No dataloader func found for model class {:}'.format(model_clz))
 
     # Actually create the trainer
-    return Trainer(device, model_clz, dataset_clz, dataloader_func)
+    return Trainer(device, model_clz, dataset_clz, dataloader_func, project_name=project_name, group_name=group_name)
 
 
 def create_normal_dataloader(dataset, shuffle, n_workers):
@@ -70,24 +72,21 @@ def create_normal_dataloader(dataset, shuffle, n_workers):
 
 def create_graph_dataloader(dataset, shuffle, n_workers):
     # TODO batch_size and n_workers for Graph data loader
-    return GraphDataloader(dataset, shuffle)
+    # return GraphDataloader(dataset, shuffle)
+    raise NotImplementedError
 
 
 class Trainer:
 
-    def __init__(self, device, model_clz, dataset_clz, dataloader_func):
+    def __init__(self, device, model_clz, dataset_clz, dataloader_func, project_name=None, group_name=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
         self.dataloader_func = dataloader_func
-
-    @property
-    def model_name(self):
-        return self.model_clz.name
-
-    @property
-    def dataset_name(self):
-        return self.dataset_clz.name
+        self.model_name = self.model_clz.name
+        self.dataset_name = self.dataset_clz.name
+        self.project_name = project_name if project_name is not None else 'Train_{:s}'.format(self.dataset_name)
+        self.group_name = group_name if group_name is not None else 'Train_{:s}'.format(self.model_name)
 
     @property
     def metric_clz(self):
@@ -96,14 +95,6 @@ class Trainer:
     @property
     def criterion(self):
         return self.metric_clz.criterion()
-
-    @property
-    def wandb_project_name(self):
-        return 'Train_{:s}'.format(self.dataset_name)
-
-    @property
-    def wandb_group_name(self):
-        return 'Train_{:s}_{:s}'.format(self.dataset_name, self.model_name)
 
     def create_dataloader(self, dataset, shuffle, n_workers):
         return self.dataloader_func(dataset, shuffle, n_workers)
@@ -150,7 +141,8 @@ class Trainer:
         # epoch_train_metrics = metrics.eval_model(model, train_dataloader.dataset, criterion, self.metric_clz)
         epoch_val_metrics = None
         if val_dataloader is not None:
-            epoch_val_metrics = metrics.eval_model(model, val_dataloader, self.metric_clz)
+            bag_metrics, _ = metrics.eval_model(model, val_dataloader, bag_metrics=(self.metric_clz,))
+            epoch_val_metrics = bag_metrics[0]
 
         return epoch_train_metrics, epoch_val_metrics
 
@@ -255,9 +247,12 @@ class Trainer:
 
         # Perform final eval and log with wandb
         sleep(0.1)
-        train_results, val_results, test_results = metrics.eval_complete(best_model, train_dataloader, val_dataloader,
-                                                                         test_dataloader, self.metric_clz,
-                                                                         verbose=verbose)
+        results = metrics.eval_complete(best_model, train_dataloader, val_dataloader, test_dataloader,
+                                        bag_metrics=(self.metric_clz,), verbose=verbose)
+        train_results, _, val_results, _, test_results, _ = results
+        train_results = train_results[0]
+        val_results = val_results[0]
+        test_results = test_results[0]
         train_results.wandb_summary('train')
         val_results.wandb_summary('val')
         test_results.wandb_summary('test')
@@ -280,8 +275,8 @@ class Trainer:
 
             training_config['dataset_fold'] = r
             wandb.init(
-                project=self.wandb_project_name,
-                group=self.wandb_group_name,
+                project=self.project_name,
+                group=self.group_name,
                 config=training_config,
                 reinit=True,
             )

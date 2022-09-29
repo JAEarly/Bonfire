@@ -8,7 +8,7 @@ from bonfire.model.benchmark import model_names
 from bonfire.train.metrics import eval_complete, output_results
 from bonfire.train.trainer import create_trainer_from_names
 from bonfire.util import get_device, load_model
-from bonfire.util.yaml_util import parse_yaml_config, parse_training_config
+from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config
 
 device = get_device()
 
@@ -32,7 +32,7 @@ def run_evaluation():
     for model_idx, model_name in enumerate(models):
         print('  Evaluating {:s}'.format(model_name))
 
-        config = parse_yaml_config(dataset_name)
+        config = parse_yaml_benchmark_config(dataset_name)
         training_config = parse_training_config(config['training'], model_name)
         wandb.init(
             config=training_config,
@@ -57,7 +57,8 @@ def evaluate(n_repeats, trainer, random_state=5):
         model = load_model(device, trainer.dataset_clz.name, trainer.model_clz, modifier=r)
         results_list = eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
                                      trainer.metric_clz, verbose=False)
-        results_arr[r, :] = results_list
+        train_results, _, val_results, _, test_results = results_list
+        results_arr[r, :] = [train_results, val_results, test_results]
         r += 1
         if r == n_repeats:
             break

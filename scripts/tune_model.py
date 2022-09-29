@@ -2,7 +2,7 @@ import argparse
 
 from bonfire.data.benchmark import dataset_names
 from bonfire.model.benchmark import model_names
-from bonfire.tune import create_tuner_from_config
+from bonfire.tune import create_benchmark_tuner
 from bonfire.util import get_device
 
 device = get_device()
@@ -22,7 +22,7 @@ def run_tuning():
 
     # Create tuner
     study_name = 'Tune_{:s}_{:s}'.format(dataset_name, model_name)
-    tuner = create_tuner_from_config(device, model_name, dataset_name, study_name, n_trials)
+    tuner = create_benchmark_tuner(device, model_name, dataset_name, study_name, n_trials)
 
     # Log
     print('Starting {:s} tuning'.format(dataset_name))

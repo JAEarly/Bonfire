@@ -7,7 +7,7 @@ from optuna import visualization as viz
 from bonfire.data.benchmark import get_dataset_clz
 from bonfire.model.benchmark import get_model_clz
 from bonfire.train.trainer import create_trainer_from_clzs
-from bonfire.util.yaml_util import parse_yaml_config, parse_training_config, parse_tuning_config, combine_configs
+from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config, parse_tuning_config, combine_configs
 
 TUNE_ROOT_DIR = "out/tune"
 
@@ -18,7 +18,7 @@ def create_tuner_from_config(device, model_name, dataset_name, study_name, n_tri
     dataset_clz = get_dataset_clz(dataset_name)
 
     # Load training and tuning configs
-    config = parse_yaml_config(dataset_name)
+    config = parse_yaml_benchmark_config(dataset_name)
     training_config = parse_training_config(config['training'], model_name)
     tuning_config = parse_tuning_config(config['tuning'], model_name)
 
@@ -28,16 +28,18 @@ def create_tuner_from_config(device, model_name, dataset_name, study_name, n_tri
 
 class Tuner:
 
-    def __init__(self, device, model_clz, dataset_clz, study_name, training_config, tuning_config, n_trials):
+    def __init__(self, device, model_clz, dataset_clz, study_name, training_config, tuning_config, n_trials,
+                 dataloader_func=None, project_name=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
-        self.project_name = 'Tune_{:s}'.format(self.dataset_clz.name)
+        self.project_name = project_name if project_name is not None else 'Tune_{:s}'.format(self.dataset_clz.name)
         self.study_name = study_name
         self.training_config = training_config
         self.tuning_config = tuning_config
         self.n_trials = n_trials
         self.study = self.create_study()
+        self.dataloader_func = dataloader_func
 
     @property
     def direction(self):
@@ -79,7 +81,8 @@ class Tuner:
         )
 
         # Create trainer based on params and actually run training
-        trainer = create_trainer_from_clzs(self.device, self.model_clz, self.dataset_clz)
+        trainer = create_trainer_from_clzs(self.device, self.model_clz, self.dataset_clz,
+                                           dataloader_func=self.dataloader_func)
         model, _, val_results, _ = trainer.train_single(verbose=False, trial=trial)
 
         # Get final val key metric (the one that we're optimising for) and finish wandb

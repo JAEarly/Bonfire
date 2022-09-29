@@ -35,8 +35,8 @@ def load_class_dict_df():
 RAW_DATA_DIR = 'data/DGR/raw'
 TARGET_OUT_PATH = 'data/DGR/targets.csv'
 COVER_DIST_PATH = 'data/DGR/cover_dist.csv'
-METADATA_DF = load_metadata_df()
-CLASS_DICT_DF = load_class_dict_df()
+# METADATA_DF = load_metadata_df()
+# CLASS_DICT_DF = load_class_dict_df()
 
 basic_transform = transforms.Compose([transforms.ToTensor(),
                                       transforms.Normalize((0.2811, 0.3786, 0.4077), (0.0696, 0.0759, 0.1054))])
@@ -278,7 +278,7 @@ class DgrDataset(MilDataset):
                 preds = torch.ones_like(targets)
                 preds *= pred
                 metric = RegressionMetric.calculate_metric(preds, targets, None)
-                print('MSE Loss: {:.4f}'.format(metric.mse_loss))
+                print('RMSE Loss: {:.4f}'.format(metric.rmse_loss))
                 print('MAE Loss: {:.4f}'.format(metric.mae_loss))
 
             print('-- Train --')

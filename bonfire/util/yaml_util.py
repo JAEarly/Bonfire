@@ -1,8 +1,12 @@
 import yaml
 
 
-def parse_yaml_config(dataset_name):
+def parse_yaml_benchmark_config(dataset_name):
     path = "bonfire/config/{:s}_config.yaml".format(dataset_name)
+    parse_yaml_config(path)
+
+
+def parse_yaml_config(path):
     stream = open(path, 'r')
     config = {}
     for config_group, params in yaml.safe_load(stream).items():
@@ -29,6 +33,8 @@ def parse_training_config(all_training_configs, model_name):
     # Override (or add) model specific param values if they exist
     if model_name in all_training_configs:
         return combine_configs(default_config, all_training_configs[model_name])
+    else:
+        print("WARNING: config not found for {:s} - using default config ONLY".format(model_name))
     return default_config
 
 
