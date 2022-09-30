@@ -21,5 +21,3 @@ pip install -e bonfire
 ```
 
 3. Manually [install PyTorch](https://pytorch.org/get-started/locally/) with CUDA support.
-
-4. Manually [install PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html) with CUDA support.
