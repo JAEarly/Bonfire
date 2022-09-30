@@ -49,7 +49,7 @@ class MilDataset(Dataset, ABC):
 
     @classmethod
     @abstractmethod
-    def create_datasets(cls, num_test_bags=None):
+    def dataset_folder_iter(cls, n_folds, num_test_bags=None):
         pass
 
     @classmethod

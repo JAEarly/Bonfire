@@ -4,7 +4,7 @@ import optuna
 import wandb
 from optuna import visualization as viz
 
-from bonfire.util.yaml_util import combine_configs
+from bonfire.util.config_util import combine_configs
 from bonfire.train.trainer import Trainer
 
 TUNE_ROOT_DIR = "out/tune"

@@ -195,24 +195,24 @@ class Trainer:
         return best_model, train_results, val_results, test_results
 
     def train_single(self, verbose=True, trial=None, random_state=5):
-        train_dataset, val_dataset, test_dataset = next(self.dataset_clz.create_datasets(random_state=random_state))
+        train_dataset, val_dataset, test_dataset = next(self.dataset_clz.dataset_folder_iter(random_state=random_state))
         train_dataloader = self.create_dataloader(train_dataset, True, 0)
         val_dataloader = self.create_dataloader(val_dataset, False, 0)
         test_dataloader = self.create_dataloader(test_dataset, False, 0)
         return self.train_model(train_dataloader, val_dataloader, test_dataloader, verbose=verbose, trial=trial)
 
-    def train_multiple(self, training_config, n_repeats=5, verbose=True, random_state=5):
+    def train_multiple(self, config, n_repeats=5, verbose=True, random_state=5):
         best_models = []
         results_arr = np.empty((1, n_repeats, 3), dtype=object)
-        r = 0
-        for train_dataset, val_dataset, test_dataset in self.dataset_clz.create_datasets(random_state=random_state):
-            print('Repeat {:d}/{:d}'.format(r + 1, n_repeats))
+        for fold, datasets in enumerate(self.dataset_clz.dataset_folder_iter(n_repeats, random_state=random_state)):
+            train_dataset, val_dataset, test_dataset = datasets
+            print('Repeat {:d}/{:d}'.format(fold + 1, n_repeats))
 
-            training_config['dataset_fold'] = r
+            config['dataset_fold'] = fold
             wandb.init(
                 project=self.project_name,
                 group=self.group_name,
-                config=training_config,
+                config=config,
                 reinit=True,
             )
             train_dataloader = self.create_dataloader(train_dataset, True, 0)
@@ -222,14 +222,10 @@ class Trainer:
             model = train_outputs[0]
             repeat_results = train_outputs[1:]
             best_models.append(model)
-            results_arr[:, r] = repeat_results
+            results_arr[:, fold] = repeat_results
 
             # Save model
-            save_model(self.dataset_name, model, modifier=r, verbose=verbose)
-
-            r += 1
-            if r == n_repeats:
-                break
+            save_model(self.dataset_name, model, modifier=fold, verbose=verbose)
 
         if verbose:
             metrics.output_results([self.model_name], results_arr)

@@ -2,7 +2,7 @@ from abc import ABC
 
 import torch
 
-from model.model_base import MultipleInstanceModel
+from bonfire.model.model_base import MultipleInstanceModel
 
 
 class MultipleInstanceNN(MultipleInstanceModel, ABC):
