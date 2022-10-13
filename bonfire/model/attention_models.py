@@ -3,7 +3,7 @@ from abc import ABC
 import torch
 from torch import nn
 
-from model.nn_models import MultipleInstanceNN
+from bonfire.model.nn_models import MultipleInstanceNN
 
 
 class AttentionNN(MultipleInstanceNN, ABC):
@@ -11,10 +11,10 @@ class AttentionNN(MultipleInstanceNN, ABC):
     name = "AttentionNN"
 
     def __init__(self, device, n_classes, n_expec_dims, encoder, embedding_classifier,
-                 attn_n_heads, attn_d_in, attn_d_linear, attn_dropout):
+                 attn_n_heads, attn_d_in, attn_d_hid, attn_dropout):
         super().__init__(device, n_classes, n_expec_dims)
         self.encoder = encoder
-        self.aggregator = MultiHeadAttentionBlock(attn_n_heads, attn_d_in, attn_d_linear, attn_dropout)
+        self.aggregator = MultiHeadAttentionBlock(attn_n_heads, attn_d_in, attn_d_hid, attn_dropout)
         self.embedding_classifier = embedding_classifier
 
     def _internal_forward(self, bags):
