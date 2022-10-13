@@ -25,13 +25,6 @@ class MilDataset(Dataset, ABC):
     @classmethod
     @property
     @abstractmethod
-    def d_in(cls):
-        # TODO remove
-        pass
-
-    @classmethod
-    @property
-    @abstractmethod
     def n_expected_dims(cls):
         pass
 
