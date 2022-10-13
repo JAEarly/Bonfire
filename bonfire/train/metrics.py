@@ -223,31 +223,6 @@ class IoUMetric(Metric):
         raise NotImplementedError()
 
 
-# class CountRegressionMetric(RegressionMetric):
-#
-#     def __init__(self, mse_loss, mae_loss, conf_mat=None):
-#         super().__init__(mse_loss, mae_loss)
-#         self.conf_mat = conf_mat
-#
-#     @staticmethod
-#     def calculate_metric(preds, targets, labels):
-#         regression_metric = RegressionMetric.calculate_metric(preds, targets, labels)
-#         max_count = int(max(max(targets), max(preds)))
-#         labels = list(range(max_count + 1))
-#         conf_mat = pd.DataFrame(
-#             confusion_matrix(targets.long(), torch.round(preds), labels=labels),
-#             index=pd.Index(labels, name='Actual'),
-#             columns=pd.Index(labels, name='Predicted')
-#         )
-#         return CountRegressionMetric(regression_metric.rmse_loss, regression_metric.mae_loss, conf_mat)
-#
-#     def out(self):
-#         print('MSE Loss: {:.3f}'.format(self.rmse_loss))
-#         print('MAE Loss: {:.3f}'.format(self.mae_loss))
-#         if self.conf_mat is not None:
-#             print(self.conf_mat)
-
-
 def eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
                   bag_metrics=(), instance_metrics=(), verbose=False):
     train_bag_res, train_inst_res = eval_model(model, train_dataloader, bag_metrics=bag_metrics,

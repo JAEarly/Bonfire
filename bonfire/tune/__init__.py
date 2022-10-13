@@ -1,6 +1,6 @@
-from bonfire.data.benchmark import get_dataset_clz
-from bonfire.model.benchmark import get_model_clz
-from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config, parse_tuning_config
+from bonfire.dataset import get_dataset_clz
+from bonfire.model import get_model_clz
+from bonfire.util.config_util import parse_yaml_benchmark_config, parse_training_config, parse_tuning_config
 from .tuner import Tuner
 
 
