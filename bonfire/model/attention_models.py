@@ -11,10 +11,10 @@ class AttentionNN(MultipleInstanceNN, ABC):
     name = "AttentionNN"
 
     def __init__(self, device, n_classes, n_expec_dims, encoder, embedding_classifier,
-                 attn_n_heads, attn_d_in, attn_d_hid, attn_dropout):
+                 attn_d_in, attn_d_hid, attn_dropout):
         super().__init__(device, n_classes, n_expec_dims)
         self.encoder = encoder
-        self.aggregator = MultiHeadAttentionBlock(attn_n_heads, attn_d_in, attn_d_hid, attn_dropout)
+        self.aggregator = AttentionBlock(attn_d_in, attn_d_hid, attn_dropout)
         self.embedding_classifier = embedding_classifier
 
     def _internal_forward(self, bags):
@@ -53,21 +53,4 @@ class AttentionBlock(nn.Module):
         attn = torch.transpose(attn, 1, 0)
         bag_embedding = torch.mm(attn, x)
         bag_embedding = self.dropout(bag_embedding)
-        return bag_embedding, attn
-
-
-class MultiHeadAttentionBlock(nn.Module):
-
-    def __init__(self, n_heads, d_in, d_attn, dropout):
-        super().__init__()
-        self.n_heads = n_heads
-        self.heads = nn.ModuleList([AttentionBlock(d_in, d_attn, dropout=dropout) for _ in range(self.n_heads)])
-
-    def forward(self, x):
-        # Pass input through each head
-        head_outs = [head(x) for head in self.heads]
-        # Concatenate bag representations from each head
-        bag_embedding = torch.cat([h[0] for h in head_outs], dim=1)
-        # Stack attention outputs from each head
-        attn = torch.stack([h[1].squeeze() for h in head_outs])
         return bag_embedding, attn

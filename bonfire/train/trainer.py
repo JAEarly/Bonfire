@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from bonfire.train import metrics
 from bonfire.util import save_model
+from bonfire.util.config import config
 
 
 def mil_collate_function(batch):
@@ -201,7 +202,7 @@ class Trainer:
         test_dataloader = self.create_dataloader(test_dataset, False, 0)
         return self.train_model(train_dataloader, val_dataloader, test_dataloader, verbose=verbose, trial=trial)
 
-    def train_multiple(self, config, n_repeats=5, verbose=True, random_state=5):
+    def train_multiple(self, n_repeats=5, verbose=True, random_state=5):
         best_models = []
         results_arr = np.empty((1, n_repeats, 3), dtype=object)
         for fold, datasets in enumerate(self.dataset_clz.dataset_folder_iter(n_repeats, random_state=random_state)):
@@ -212,7 +213,7 @@ class Trainer:
             wandb.init(
                 project=self.project_name,
                 group=self.group_name,
-                config=config,
+                config=config.get_config_dict(),
                 reinit=True,
             )
             train_dataloader = self.create_dataloader(train_dataset, True, 0)

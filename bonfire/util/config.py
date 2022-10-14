@@ -13,6 +13,14 @@ class Config:
             return wandb.config[param_name]
         return self._config_dict[param_name]
 
+    def __setitem__(self, param_name, value):
+        if self._use_wandb:
+            raise NotImplementedError
+        self._config_dict[param_name] = value
+
+    def get_config_dict(self):
+        return self._config_dict
+
 
 config: Config = Config({}, False)
 
