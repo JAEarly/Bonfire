@@ -44,7 +44,8 @@ def create_trainer_from_names(device, model_name, dataset_name, project_name=Non
     return create_trainer_from_clzs(device, model_clz, dataset_clz, project_name=project_name)
 
 
-def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None, group_name=None):
+def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=None, project_name=None, group_name=None,
+                             trainer_clz=None):
     # Util function for checking if a model clz (m_clz) inherits from a list of base model classes (b_clzs)
     def check_clz_base_in(m_clz, b_clzs):
         return any([base_clz in b_clzs for base_clz in inspect.getmro(m_clz)])
@@ -62,7 +63,10 @@ def create_trainer_from_clzs(device, model_clz, dataset_clz, dataloader_func=Non
             raise ValueError('No dataloader func found for model class {:}'.format(model_clz))
 
     # Actually create the trainer
-    return Trainer(device, model_clz, dataset_clz, dataloader_func, project_name=project_name, group_name=group_name)
+    if trainer_clz is None:
+        trainer_clz = Trainer
+    return trainer_clz(device, model_clz, dataset_clz, dataloader_func,
+                       project_name=project_name, group_name=group_name)
 
 
 def create_normal_dataloader(dataset, shuffle, n_workers):
