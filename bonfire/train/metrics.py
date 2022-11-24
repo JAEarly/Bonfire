@@ -9,7 +9,6 @@ import wandb
 from sklearn.metrics import accuracy_score, confusion_matrix
 from texttable import Texttable
 from torch import nn
-from tqdm import tqdm
 
 
 class Metric(ABC):
@@ -246,61 +245,6 @@ class IoUMetric(Metric):
 #         print('MAE Loss: {:.3f}'.format(self.mae_loss))
 #         if self.conf_mat is not None:
 #             print(self.conf_mat)
-
-
-def eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
-                  bag_metrics=(), instance_metrics=(), verbose=False):
-    train_bag_res, train_inst_res = eval_model(model, train_dataloader, bag_metrics=bag_metrics,
-                                               instance_metrics=instance_metrics, verbose=verbose)
-    val_bag_res, val_inst_res = eval_model(model, val_dataloader, bag_metrics=bag_metrics,
-                                           instance_metrics=instance_metrics, verbose=verbose)
-    test_bag_res, test_inst_res = eval_model(model, test_dataloader, bag_metrics=bag_metrics,
-                                             instance_metrics=instance_metrics, verbose=verbose)
-    return train_bag_res, train_inst_res, val_bag_res, val_inst_res, test_bag_res, test_inst_res
-
-
-def eval_model(model, dataloader, bag_metrics=(), instance_metrics=(), verbose=False):
-    # Iterate through data loader and gather preds and targets
-    all_preds = []
-    all_targets = []
-    all_instance_preds = []
-    all_instance_targets = []
-    labels = list(range(model.n_classes))
-    model.eval()
-    with torch.no_grad():
-        for data in tqdm(dataloader, desc='Evaluating', leave=False):
-            bags, targets, instance_targets = data[0], data[1], data[2]
-            bag_pred, instance_pred = model.forward_verbose(bags)
-            all_preds.append(bag_pred.cpu())
-            all_targets.append(targets.cpu())
-
-            instance_pred = instance_pred[0]
-            if instance_pred is not None:
-                all_instance_preds.append(instance_pred.squeeze().cpu())
-            all_instance_targets.append(instance_targets.squeeze().cpu())
-
-    # Calculate bag results
-    bag_results = None
-    if bag_metrics:
-        all_preds = torch.cat(all_preds)
-        all_targets = torch.cat(all_targets)
-        bag_results = [bm.calculate_metric(all_preds, all_targets, labels) for bm in bag_metrics]
-        if verbose:
-            for bag_result in bag_results:
-                bag_result.out()
-
-    # Calculate instance results
-    instance_results = None
-    if instance_metrics:
-        all_instance_preds = torch.cat(all_instance_preds)
-        all_instance_targets = torch.cat(all_instance_targets)
-        instance_results = [im.calculate_metric(all_instance_preds, all_instance_targets, labels)
-                            for im in instance_metrics]
-        if verbose:
-            for instance_result in instance_results:
-                instance_result.out()
-
-    return bag_results, instance_results
 
 
 def output_results(model_names, results_arr, sort=True, latex=False):

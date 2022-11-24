@@ -5,7 +5,7 @@ import wandb
 
 from bonfire.data.benchmark import dataset_names
 from bonfire.model.benchmark import model_names
-from bonfire.train.metrics import eval_complete, output_results
+from bonfire.train.metrics import output_results
 from bonfire.train.trainer import create_trainer_from_names
 from bonfire.util import get_device, load_model
 from bonfire.util.yaml_util import parse_yaml_benchmark_config, parse_training_config
@@ -55,8 +55,8 @@ def evaluate(n_repeats, trainer, random_state=5):
         val_dataloader = trainer.create_dataloader(val_dataset, False, 0)
         test_dataloader = trainer.create_dataloader(test_dataset, False, 0)
         model = load_model(device, trainer.dataset_clz.name, trainer.model_clz, modifier=r)
-        results_list = eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
-                                     trainer.metric_clz, verbose=False)
+        results_list = trainer.eval_complete(model, train_dataloader, val_dataloader, test_dataloader,
+                                             trainer.metric_clz, verbose=False)
         train_results, _, val_results, _, test_results = results_list
         results_arr[r, :] = [train_results, val_results, test_results]
         r += 1
