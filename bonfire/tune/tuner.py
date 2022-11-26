@@ -29,7 +29,7 @@ def create_tuner_from_config(device, model_name, dataset_name, study_name, n_tri
 class Tuner:
 
     def __init__(self, device, model_clz, dataset_clz, study_name, training_config, tuning_config, n_trials,
-                 dataloader_func=None, project_name=None):
+                 dataloader_func=None, project_name=None, trainer_clz=None):
         self.device = device
         self.model_clz = model_clz
         self.dataset_clz = dataset_clz
@@ -40,6 +40,7 @@ class Tuner:
         self.n_trials = n_trials
         self.study = self.create_study()
         self.dataloader_func = dataloader_func
+        self.trainer_clz = trainer_clz
 
     @property
     def direction(self):
@@ -82,7 +83,7 @@ class Tuner:
 
         # Create trainer based on params and actually run training
         trainer = create_trainer_from_clzs(self.device, self.model_clz, self.dataset_clz,
-                                           dataloader_func=self.dataloader_func)
+                                           dataloader_func=self.dataloader_func, trainer_clz=self.trainer_clz)
         model, _, val_results, _ = trainer.train_single(verbose=False, trial=trial)
 
         # Get final val key metric (the one that we're optimising for) and finish wandb

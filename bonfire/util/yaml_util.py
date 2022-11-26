@@ -34,7 +34,7 @@ def parse_training_config(all_training_configs, model_name):
     if model_name in all_training_configs:
         return combine_configs(default_config, all_training_configs[model_name])
     else:
-        print("WARNING: config not found for {:s} - using default config ONLY".format(model_name))
+        print("WARNING: training config not found for {:s} - using default config ONLY".format(model_name))
     return default_config
 
 
@@ -44,6 +44,8 @@ def parse_tuning_config(all_tuning_configs, model_name):
     # Override with model specific param values if they exist
     if model_name in all_tuning_configs:
         return combine_configs(default_config, all_tuning_configs[model_name])
+    else:
+        print("WARNING: tuning config not found for {:s} - using default config ONLY".format(model_name))
     return default_config
 
 
