@@ -121,6 +121,8 @@ class Trainer:
         # epoch_mi_loss = 0
         # epoch_mi_sub_losses = torch.zeros(3)
         for data in tqdm(train_dataloader, desc='Epoch Progress', leave=False):
+            # TODO is it okay to do this every time? Even if we don't need it? Some datasets do (e.g., multi res dgr).
+            torch.cuda.empty_cache()
             bags, targets = data[0], data[1].to(self.device)
             optimizer.zero_grad()
             outputs = model(bags)
