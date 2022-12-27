@@ -16,10 +16,14 @@ def create_benchmark_tuner(device, model_name, dataset_name, study_name, n_trial
 
 
 def create_tuner_from_config(device, model_clz, dataset_clz, config, study_name, n_trials,
-                             dataloader_func=None, project_name=None, trainer_clz=None):
+                             dataloader_func=None, project_name=None, trainer_clz=None, model_name=None):
     # Load training and tuning configs
-    training_config = parse_training_config(config['training'], model_clz.name)
-    tuning_config = parse_tuning_config(config['tuning'], model_clz.name)
+    if model_name is None:
+        # Fall back on model clz if specific model name not provided
+        model_name = model_clz.name
+        print('Model name not provided to create tuning config. Instead, using model clz name: {:s}'.format(model_name))
+    training_config = parse_training_config(config['training'], model_name)
+    tuning_config = parse_tuning_config(config['tuning'], model_name)
 
     # Create tuner
     return Tuner(device, model_clz, dataset_clz, study_name, training_config, tuning_config, n_trials,
