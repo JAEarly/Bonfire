@@ -330,14 +330,17 @@ class Trainer:
         with torch.no_grad():
             for data in tqdm(dataloader, desc='Evaluating', leave=False):
                 bags, targets, instance_targets = data[0], data[1], data[2]
-                bag_pred, instance_pred = model.forward_verbose(bags)
-                all_preds.append(bag_pred.cpu())
-                all_targets.append(targets.cpu())
 
-                instance_pred = instance_pred[0]
-                if instance_pred is not None:
-                    all_instance_preds.append(instance_pred.squeeze().cpu())
-                all_instance_targets.append(instance_targets.squeeze().cpu())
+                # This is a bit of a hack, but just ignore any cases where instance targets is a list (generated data)
+                if type(instance_targets) is not list:
+                    bag_pred, instance_pred = model.forward_verbose(bags)
+                    all_preds.append(bag_pred.cpu())
+                    all_targets.append(targets.cpu())
+
+                    instance_pred = instance_pred[0]
+                    if instance_pred is not None:
+                        all_instance_preds.append(instance_pred.squeeze().cpu())
+                    all_instance_targets.append(instance_targets.squeeze().cpu())
 
         # Calculate bag results
         bag_results = None
