@@ -63,7 +63,7 @@ class Metric(ABC):
 
 class ClassificationMetric(Metric):
 
-    optimise_direction = 'maximize'
+    optimise_direction = 'minimize'
 
     def __init__(self, accuracy, loss, conf_mat):
         self.accuracy = accuracy
@@ -71,7 +71,7 @@ class ClassificationMetric(Metric):
         self.conf_mat = conf_mat
 
     def key_metric(self):
-        return self.accuracy
+        return self.loss
 
     @staticmethod
     def criterion():
