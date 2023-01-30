@@ -53,7 +53,7 @@ class MasatiEmbeddingSpaceNN(models.EmbeddingSpaceNN):
         }
 
     @overrides
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         # Clamp outputs to between 0 and 1 if not training
         bag_predictions, instance_predictions = super()._internal_forward(bags)
         if not self.training:
@@ -76,7 +76,7 @@ class MasatiInstanceSpaceNN(models.InstanceSpaceNN):
         }
 
     @overrides
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         # Clamp outputs to between 0 and 1 if not training
         bag_predictions, instance_predictions = super()._internal_forward(bags)
         if not self.training:

@@ -26,15 +26,15 @@ class MultipleInstanceModel(nn.Module, ABC):
         pass
 
     @abstractmethod
-    def forward(self, model_input):
+    def forward(self, model_input, input_metadata=None):
         pass
 
     @abstractmethod
-    def forward_verbose(self, model_input):
+    def forward_verbose(self, model_input, input_metadata=None):
         pass
 
     @abstractmethod
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         pass
 
     def suggest_train_params(self):
@@ -43,12 +43,12 @@ class MultipleInstanceModel(nn.Module, ABC):
 
 class MultipleInstanceNN(MultipleInstanceModel, ABC):
 
-    def forward(self, model_input):
+    def forward(self, model_input, input_metadata=None):
         # We don't care about any interpretability output here
-        bag_predictions, _ = self.forward_verbose(model_input)
+        bag_predictions, _ = self.forward_verbose(model_input, input_metadata=input_metadata)
         return bag_predictions
 
-    def forward_verbose(self, model_input):
+    def forward_verbose(self, model_input, input_metadata=None):
         unbatched_bag = False
         # Model input is tensor
         if torch.is_tensor(model_input):
@@ -57,13 +57,17 @@ class MultipleInstanceNN(MultipleInstanceModel, ABC):
             if unbatched_bag:
                 # Just a single bag on its own, not in a batch, therefore stick it in a list
                 bags = [model_input]
+                # If metadata is not None, also place in a list
+                bags_metadata = [input_metadata] if input_metadata is not None else None
             else:
                 # Assume already batched
                 bags = model_input
+                bags_metadata = input_metadata
         # Model input is list
         elif type(model_input) == list:
             # Assume already batched
             bags = model_input
+            bags_metadata = input_metadata
         # Invalid input type
         else:
             raise ValueError('Invalid model input type {:}'.format(type(model_input)))
@@ -71,7 +75,7 @@ class MultipleInstanceNN(MultipleInstanceModel, ABC):
         # Actually pass the input through the model
         #  Note instance interpretations has a different meaning depending on the model
         #  They can be, but are not always, instance predictions (e.g., attention).
-        bag_predictions, instance_interpretations = self._internal_forward(bags)
+        bag_predictions, instance_interpretations = self._internal_forward(bags, bags_metadata=bags_metadata)
 
         # If given input was not batched, also un-batch the output
         if unbatched_bag:
@@ -88,7 +92,7 @@ class InstanceSpaceNN(MultipleInstanceNN, ABC):
         self.encoder = encoder
         self.aggregator = aggregator
 
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         batch_size = len(bags)
         bag_predictions = torch.zeros((batch_size, self.n_classes)).to(self.device)
         # Bags may be of different sizes, so we can't use a tensor to store the instance predictions
@@ -117,7 +121,7 @@ class EmbeddingSpaceNN(MultipleInstanceNN, ABC):
         self.encoder = encoder
         self.aggregator = aggregator
 
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         bag_predictions = torch.zeros((len(bags), self.n_classes)).to(self.device)
         for i, instances in enumerate(bags):
             # Embed instances
@@ -142,7 +146,7 @@ class AttentionNN(MultipleInstanceNN, ABC):
         self.encoder = encoder
         self.aggregator = aggregator
 
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         bag_predictions = torch.zeros((len(bags), self.n_classes)).to(self.device)
         all_attention_values = []
         for i, instances in enumerate(bags):
@@ -273,7 +277,7 @@ class MiLstm(MultipleInstanceNN, ABC):
     #     )
     #     return net_discrim_global, net_discrim_local, net_discrim_prior
 
-    def _internal_forward(self, bags):
+    def _internal_forward(self, bags, bags_metadata=None):
         bag_predictions = torch.zeros((len(bags), self.n_classes)).to(self.device)
         all_cumulative_bag_predictions = []
 

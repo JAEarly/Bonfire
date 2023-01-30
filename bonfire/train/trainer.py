@@ -123,9 +123,12 @@ class Trainer:
         for data in tqdm(train_dataloader, desc='Epoch Progress', leave=False):
             # TODO is it okay to do this every time? Even if we don't need it? Some datasets do (e.g., multi res dgr).
             torch.cuda.empty_cache()
-            bags, targets = data[0], data[1].to(self.device)
+            bags = data['bag']
+            targets = data['target'].to(self.device)
+            metadata = data['bag_metadata']
+
             optimizer.zero_grad()
-            outputs = model(bags)
+            outputs = model(bags, input_metadata=metadata)
             # outputs, mi_scores = model(bags)
             loss = criterion(outputs, targets)
             # prediction_loss, mi_loss, mi_sub_losses = criterion(outputs, targets, mi_scores)
@@ -329,8 +332,12 @@ class Trainer:
         model.eval()
         with torch.no_grad():
             for data in tqdm(dataloader, desc='Evaluating', leave=False):
-                bags, targets, instance_targets = data[0], data[1], data[2]
-                bag_pred, instance_pred = model.forward_verbose(bags)
+                bags = data['bag']
+                targets = data['target']
+                instance_targets = data['instance_targets']
+                metadata = data['bag_metadata']
+
+                bag_pred, instance_pred = model.forward_verbose(bags, input_metadata=metadata)
                 all_preds.append(bag_pred.cpu())
                 all_targets.append(targets.cpu())
 
