@@ -247,7 +247,7 @@ class IoUMetric(Metric):
 #             print(self.conf_mat)
 
 
-def output_results(model_names, results_arr, sort=True, latex=False):
+def output_results(model_names, results_arr, sort=True, latex=False, conf_mats=False):
     n_models, n_repeats, n_splits = results_arr.shape
     assert n_models == len(model_names)
     assert n_splits == 3
@@ -258,7 +258,7 @@ def output_results(model_names, results_arr, sort=True, latex=False):
     elif issubclass(results_type, RegressionMetric):
         output_regression_results(model_names, results_arr, sort=sort, latex=latex)
     elif results_type == IoUMetric:
-        output_iou_results(model_names, results_arr, sort=sort, latex=latex)
+        output_iou_results(model_names, results_arr, sort=sort, latex=latex, conf_mats=conf_mats)
     else:
         raise NotImplementedError('No results output for metrics {:}'.format(results_type))
 
@@ -325,18 +325,26 @@ def output_regression_results(model_names, results_arr, sort=True, latex=False):
         print(latextable.draw_latex(table))
 
 
-def output_iou_results(model_names, results_arr, sort=True, latex=False):
+def output_iou_results(model_names, results_arr, sort=True, latex=False, conf_mats=False):
     n_models, n_repeats, _ = results_arr.shape
     results = np.empty((n_models, 3), dtype=object)
     mean_test_ious = []
+    test_conf_mats = []
     for model_idx in range(n_models):
         model_results = results_arr[model_idx]
         expanded_model_results = np.empty((n_repeats, 3), dtype=float)
+        model_test_conf_mats = []
         for repeat_idx in range(n_repeats):
             train_results, val_results, test_results = model_results[repeat_idx]
             expanded_model_results[repeat_idx, :] = [train_results.mean_iou,
                                                      val_results.mean_iou,
                                                      test_results.mean_iou]
+            model_test_conf_mats.append(test_results.conf_mat)
+
+        # Compute average confusion matrix and append to list
+        mean_test_conf_mat = torch.mean(torch.stack(model_test_conf_mats), dim=0)
+        test_conf_mats.append(mean_test_conf_mat)
+
         mean = np.mean(expanded_model_results, axis=0)
         sem = np.std(expanded_model_results, axis=0) / np.sqrt(len(expanded_model_results))
         mean_test_ious.append(mean[2])
@@ -354,3 +362,13 @@ def output_iou_results(model_names, results_arr, sort=True, latex=False):
     print(table.draw())
     if latex:
         print(latextable.draw_latex(table))
+    if conf_mats:
+        for idx, conf_mat in enumerate(test_conf_mats):
+            print(model_names[idx])
+            conf_mat_rows = [['{:.4f}'.format(c) for c in r] for r in conf_mat]
+            table = Texttable()
+            table.set_cols_dtype(['t'] * len(conf_mat[0]))
+            table.set_cols_align(['c'] * len(conf_mat[0]))
+            table.add_rows(conf_mat_rows, header=False)
+            table.set_max_width(0)
+            print(table.draw())
