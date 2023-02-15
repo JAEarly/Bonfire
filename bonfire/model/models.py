@@ -57,12 +57,21 @@ class MultipleInstanceNN(MultipleInstanceModel, ABC):
             if unbatched_bag:
                 # Just a single bag on its own, not in a batch, therefore stick it in a list
                 bags = [model_input]
-                # If metadata is not None, also place in a list
-                bags_metadata = [input_metadata] if input_metadata is not None else None
             else:
                 # Assume already batched
                 bags = model_input
-                bags_metadata = input_metadata
+            # If metadata is not None, sort out its batching
+            if input_metadata is not None:
+                unbatched_metadata = type(input_metadata) == dict
+                if unbatched_metadata:
+                    # If dict (unbatched) then place in list
+                    bags_metadata = [input_metadata]
+                else:
+                    # If not a dict, assume it's already in a list
+                    bags_metadata = input_metadata
+            else:
+                bags_metadata = None
+
         # Model input is list
         elif type(model_input) == list:
             # Assume already batched
