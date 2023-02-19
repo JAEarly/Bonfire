@@ -342,8 +342,10 @@ def output_iou_results(model_names, results_arr, sort=True, latex=False, conf_ma
             model_test_conf_mats.append(test_results.conf_mat)
 
         # Compute average confusion matrix and append to list
-        mean_test_conf_mat = torch.mean(torch.stack(model_test_conf_mats), dim=0)
-        test_conf_mats.append(mean_test_conf_mat)
+        if model_test_conf_mats[0] is not None:
+            test_conf_mats.append(torch.mean(torch.stack(model_test_conf_mats), dim=0))
+        else:
+            test_conf_mats.append(None)
 
         mean = np.mean(expanded_model_results, axis=0)
         sem = np.std(expanded_model_results, axis=0) / np.sqrt(len(expanded_model_results))
@@ -364,11 +366,12 @@ def output_iou_results(model_names, results_arr, sort=True, latex=False, conf_ma
         print(latextable.draw_latex(table))
     if conf_mats:
         for idx, conf_mat in enumerate(test_conf_mats):
-            print(model_names[idx])
-            conf_mat_rows = [['{:.4f}'.format(c) for c in r] for r in conf_mat]
-            table = Texttable()
-            table.set_cols_dtype(['t'] * len(conf_mat[0]))
-            table.set_cols_align(['c'] * len(conf_mat[0]))
-            table.add_rows(conf_mat_rows, header=False)
-            table.set_max_width(0)
-            print(table.draw())
+            if conf_mat is not None:
+                print(model_names[idx])
+                conf_mat_rows = [['{:.4f}'.format(c) for c in r] for r in conf_mat]
+                table = Texttable()
+                table.set_cols_dtype(['t'] * len(conf_mat[0]))
+                table.set_cols_align(['c'] * len(conf_mat[0]))
+                table.add_rows(conf_mat_rows, header=False)
+                table.set_max_width(0)
+                print(table.draw())
